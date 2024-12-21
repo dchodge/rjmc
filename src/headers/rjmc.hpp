@@ -572,7 +572,7 @@ namespace rjmc_full{
                 } else if (this->currJumpType == 2) {
                     rjadjustmentFactor = this->evaluateBirthProposal(this->proposalSample, this->proposalJump, this->currJumpIdx, this->dataList); // dlnorm(proposalJump[currJumpIdx], 3.395, 0.5961)
                 }
-                this->alpha = min(1.0, exp((this->proposedLogPosterior - this->currentLogPosterior + rjadjustmentFactor)));
+                this->alpha = MIN(1.0, exp((this->proposedLogPosterior - this->currentLogPosterior + rjadjustmentFactor)));
             }
         }
 

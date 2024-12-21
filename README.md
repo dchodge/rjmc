@@ -56,9 +56,9 @@ library(rjmc)
 
 ## Getting Started
 
-We provide examples of how to implement this package for various scenarios:
+We provide examples of how to implement this package for various scenarios in vignettes:
 
-
+- Example 1: How to fit a mixture distribution where the number of mixtures is unknown
 
 Refer to the background documentation or vignettes in the package for step-by-step tutorials.
 
