@@ -331,7 +331,7 @@ model <- list(
 
   sampleProposal = function(params, jump, datalist) {
     N <- ncol(jump)
-    if (N == 2) {
+    if (N == 1) {
       q <- c(0.0, 0.67, 1.0)
     } else if (N == 20) {
       q <- c(0.33, 1.0, 1.0)
