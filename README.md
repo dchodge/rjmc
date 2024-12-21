@@ -53,7 +53,6 @@ library(rjmc)
 
 ```
 
-
 ## Getting Started
 
 We provide examples of how to implement this package for various scenarios in vignettes:
