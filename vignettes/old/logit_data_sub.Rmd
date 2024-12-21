@@ -1,0 +1,1240 @@
+Get started: a very simple working example 
+
+## Load the packages
+```{r}
+# https://people.maths.bris.ac.uk/~mapjg/papers/RichardsonGreenRSSB.pdf
+#install.packages("devtools")
+#library(devtools)
+devtools::load_all()
+library(lubridate)
+library(patchwork)
+library(tidybayes)
+library(ggdist)
+
+````
+
+```{r}
+
+max_t <- 4
+
+a <- runif(1000, -max_t, max_t)
+b <- runif(1000, -1, 1)
+
+
+post_summary <- 1:length(a) %>% 
+  map_df(
+    ~data.frame(
+      chain = 1,
+      t = seq(0, max_t, length = 50),
+      p = 1.0 / (1.0 + exp(- (a[.x] - (a[.x]/ max_t + b[.x]) *  seq(0, max_t, length = 50)) ) )
+    )
+  ) %>% group_by(chain, t) %>% mean_qi(p, .width = 0.5)
+
+post_summary %>% 
+  ggplot() + 
+    geom_ribbon(aes(x = t, ymin = .lower, ymax = .upper), alpha = 0.5) + 
+    geom_line(aes(x = t, y = p))
+
+```
+
+
+```{r}
+# https://people.maths.bris.ac.uk/~mapjg/papers/RichardsonGreenRSSB.pdf
+#install.packages("devtools")
+#library(devtools)
+devtools::load_all()
+library(lubridate)
+library(patchwork)
+library(tidybayes)
+library(ggdist)
+
+
+create_data <- function(x, y) {
+  data_l <- list(
+      obs_y = y,
+      obs_x = x,
+      N_known = sum(y),
+      N_data = length(y)  
+  )
+  data_l
+}
+
+# Datasets to consider
+x_unif <- runif(30, 0, 4) %>% sort
+x_exp <- rexp(30, 1) %>% sort
+
+y_I_known_A <- rep(0, 30)
+y_I_known_B <- c(rep(1, 5), rep(0, 25))
+y_I_known_C <- c(rep(1, 15), rep(0, 15))
+
+data_unif_A <- create_data(x_unif, y_I_known_A)
+data_exp_A <- create_data(x_exp, y_I_known_A)
+
+data_unif_B <- create_data(x_unif, y_I_known_B)
+data_exp_B <- create_data(x_exp, y_I_known_B)
+
+data_unif_C <- create_data(x_unif, y_I_known_C)
+data_exp_C <- create_data(x_exp, y_I_known_C)
+
+````
+
+## Model A, fixed I list
+
+```{r}
+
+create_model <- function(exp_prior, max_t) {
+    
+  c_value <- 0.33
+
+  birth_prop <- function(N, N_known, k, c) {
+     # pk <- log(1 / (N - N_known))#(k - N_known) * log(5) - 5 - lfactorial(k - N_known)#log(1 / (N - N_known)) # log(1 / choose(N - N_known, k - N_known))
+     # pk_1 <- log(1 / (N - N_known))#(k - N_known) * log(5) - 5 - lfactorial(k - N_known)#log(1 / (N - N_known)) # log(1 / choose(N - N_known, k - N_known + 1))
+      c * 1#min(1, pk_1 / pk)
+  }
+
+  death_prop <- function(N, N_known, k, c) {
+    #  pk <- log(1 / (N - N_known))#(k - N_known) * log(5) - 5 - lfactorial(k - N_known)#log(1 / (N - N_known)) # log(1 / choose(N - N_known, k - N_known - 1))
+    #  pk_1 <- log(1 / (N - N_known))#(k - N_known) * log(5) - 5 - lfactorial(k - N_known)# log(1 / (N - N_known)) # log(1 / choose(N - N_known, k - N_known))
+      c * 1#min(1, pk / pk_1)
+  }
+
+  model <- list(
+
+    lowerParSupport_fitted = c(0, 0, 0),
+    upperParSupport_fitted = c(max_t, 1, 1),
+
+    namesOfParameters = c("beta_0", "beta_1", "p"),
+
+    sampleInitPrior = function(datalist) {
+      c(runif(1, 0, max_t), runif(1, 0, 1), runif(1, 0, 1))
+    },
+
+    sampleInitJump = function(params, datalist) {    
+      jump_new <- matrix(c(datalist$obs_y, datalist$obs_y), nrow = 2, byrow = TRUE)
+      jump_new
+    },
+
+    evaluateLogPrior = function(params, jump, datalist) {
+     #cat("in:  evaluateLogPrior")
+      p <- dunif(params[1], 0, max_t, log = TRUE)
+      p <- p + dunif(params[2], 0, 1, log = TRUE)
+
+      p <- p + dbeta(params[3], 15, 5, log = TRUE)
+
+      N <- ncol(jump)
+      N_exp <- sum(jump[1, ])
+      N_inf <- sum(jump[2, ])
+      N_known <- sum(datalist$obs_y)
+
+      # prior for Exp 
+      ## poisson
+      # p <- p + (N_exp - N_known) * log(5) - 5 - lfactorial(N_exp - N_known)
+      ## uniform
+      # cat(N_known, "\n")
+      # cat(exp_prior, "\n")
+
+      p_est <- (N_known + (N - N_known) * exp_prior)
+      # cat(p_est, "\n")
+      p <- p + (N_exp) * log(p_est) - p_est - lfactorial(N_exp)
+      #p <- p + dbinom(N_exp, N, p_est, log = TRUE)
+
+      # prior for location of 
+      p <- p + log(1 / choose(N - N_known, N_exp - N_known))
+
+      if (N_exp == N_known) {
+        #p <- p - 1e10
+      } else {
+        # p <- p + (N_exp) * log(N_known) - N_known - lfactorial(N_exp)
+      }
+
+      p <- p + log(1 / choose(N_exp - N_known, N_inf - N_known))
+     # cat("p: ", p)
+
+      p
+    },
+
+    evaluateLogLikelihood = function(params, jump, datalist) {
+    # cat("in:  evaluateLogLikelihood")
+      ll <- 0
+      N <- ncol(jump)
+      jump_e <- jump[1, ]
+      jump_i <- jump[2, ]
+
+      N_exp <- sum(jump[1, ])
+      N_inf <- sum(jump[2, ])
+
+      beta0 <- params[1]
+      beta1 <- params[2]
+
+      y <- datalist$obs_y
+      x <- datalist$obs_x
+
+      N_data <- datalist$N_data
+      ll_mean <- 0
+      j <- 0
+      for (i in 1:N_data) {
+        if (jump_e[i] == 1) {
+        #  p <- 1.0 / (1.0 + exp(- (beta0  + beta1 *  x[i]) ) )
+          p <- 1.0 / (1.0 + exp(- (beta0 - (beta0 / max_t + beta1) *  x[i]) ) )
+          ll_i <- jump_i[i] * log(p) + (1 - jump_i[i]) * log(1 - p)
+          ll <- ll + ll_i
+          j <- j + 1
+        } else {
+        # jump[i] == 1
+        }
+      }
+      if (j == 0) {
+        ll <- -1e10
+      }
+    #  cat("ll: ", ll)
+      ll
+    },
+
+    sampleBirthProposal = function(params, jump, i_idx, datalist) {
+      #cat("in:  sampleBirthProposal")
+      N <- ncol(jump)
+      jump_e <- jump[1, ]
+      jump_i <- jump[2, ]
+
+      N_exp <- sum(jump[1, ])
+      N_inf <- sum(jump[2, ])
+
+
+      id <- sample(1:N, 1)
+      while(jump[1, id] == 1) {
+        id <- sample(1:N, 1)
+      }
+      p_id <<- id
+
+      jump[1, id] <- 1
+
+      beta0 <- params[1]
+      beta1 <- params[2]
+      x <- datalist$obs_x
+    #p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[p_id]) ) )
+      p <- 1.0 / (1.0 + exp(- (beta0 - (beta0 / max_t + beta1) * x[id]) ) )
+
+      jump[2, id] <- rbinom(1, 1, p)
+
+      jump
+
+    },
+
+    sampleDeathProposal = function(params, jump, i_idx, datalist) {
+      # cat("in:  sampleDeathProposal")
+
+      N <- ncol(jump)
+      jump_e <- jump[1, ]
+      jump_i <- jump[2, ]
+
+      N_exp <- sum(jump[1, ])
+      N_inf <- sum(jump[2, ])
+
+      obs_y <- datalist$obs_y
+
+      id <- sample(1:N, 1)
+      while(jump[1, id] == 0 || obs_y[id] == 1) {
+        id <- sample(1:N, 1)
+      }
+      d_id <<- id
+
+      jump[1, id] <- 0
+      jump[2, id] <- 0
+      jump
+
+    },
+
+    evaluateBirthProposal = function(params, jump, i_idx, datalist) {
+      #cat("evaluateBirthProposal")
+      N <- ncol(jump)
+      jump_e <- jump[1, ]
+      jump_i <- jump[2, ]
+
+      inf_i <- jump[2, p_id]
+
+      N_exp <- sum(jump[1, ])
+      N_inf <- sum(jump[2, ])
+
+      N_known <- datalist$N_known
+
+      beta0 <- params[1]
+      beta1 <- params[2]
+
+      x <- datalist$obs_x
+      y <- datalist$obs_y
+
+      p_birth <- birth_prop(N, N_known, N_exp - 1, c_value)
+      p_death <- death_prop(N, N_known, N_exp, c_value)
+
+
+      beta0 <- params[1]
+      beta1 <- params[2]
+      x <- datalist$obs_x
+    # p <- 1.0 / (1.0 + exp(- (beta0 + beta1 * x[p_id]) ) )
+
+      p <- 1.0 / (1.0 + exp(- (beta0 - (beta0 / max_t + beta1) *  x[p_id]) ) )
+
+      log(N - N_exp + 1) - log(N_exp - N_known) - log(p_birth) + log(p_death) - (dbinom(inf_i, 1, p, log = TRUE))
+    },
+
+    evaluateDeathProposal = function(params, jump, i_idx, datalist) {
+      #      cat("in:  evaluateDeathProposal")
+      N <- ncol(jump)
+      inf_i <- jump[2, d_id]
+
+      jump_e <- jump[1, ]
+      jump_i <- jump[2, ]
+
+      N_exp <- sum(jump[1, ])
+      N_inf <- sum(jump[2, ])
+
+      beta0 <- params[1]
+      beta1 <- params[2]
+
+      x <- datalist$obs_x
+      y <- datalist$obs_y
+
+      N_known <- datalist$N_known
+
+      p_birth <- birth_prop(N, N_known, N_exp, c_value)
+      p_death <- death_prop(N, N_known, N_exp + 1, c_value)
+
+      beta0 <- params[1]
+      beta1 <- params[2]
+      x <- datalist$obs_x
+      p <- 1.0 / (1.0 + exp(- (beta0 - (beta0 / max_t + beta1) *  x[d_id]) ) )
+    # p <- 1.0 / (1.0 + exp(- (beta0 + beta1 * x[d_id]) ) )
+
+      log(N_exp - N_known + 1) - log(N - N_exp) + log(p_birth) - log(p_death) + (dbinom(inf_i, 1, p, log = TRUE))
+    },
+
+    sampleJump = function(params, jump, i_idx, datalist) {
+      N <- length(jump)
+      jump
+    },
+
+    sampleProposal = function(params, jump, datalist) {
+        #     cat("in:  sampleProposal")
+
+      N <- ncol(jump)
+
+      jump_e <- jump[1, ]
+      jump_i <- jump[2, ]
+
+      N_exp <- sum(jump[1, ])
+      N_inf <- sum(jump[2, ])
+
+      N_known <- datalist$N_known
+    
+      if (N_exp == N_known) {
+        b_k <- 0.33
+        d_k <- 0
+      } else if (N_exp == N) {
+        b_k <- 0
+        d_k <- 0.33
+      } else {
+        b_k <- birth_prop(N, N_known, N_exp, c_value)
+        d_k <- death_prop(N, N_known, N_exp, c_value)
+      }
+      p_k <- 1 - b_k - d_k
+      q <- c(d_k, d_k + p_k, d_k + p_k + b_k)
+
+      q
+    }
+  )
+  model
+}
+
+max_t <- 4
+exp_prior <- 0.5
+model <- create_model(exp_prior, 4)
+
+devtools::load_all()
+
+# Define the settings
+settings <-  list(
+    numberChainRuns = 1,
+    numberCores = 1,
+    iterations = 40000,
+    burninPosterior = 20000,
+    thin = 100,
+    consoleUpdates = 100,
+    onAdaptiveCov = TRUE,
+    updatesAdaptiveCov = 100,
+    burninAdaptiveCov = 1000,
+    updatesAdaptiveTemp = 10,
+    covarInitVal = 1e-6, # make very small if struggling to sample to beginning
+    covarInitValAdapt = 1e-2, # make very small if struggling to sample to beginning
+    covarMaxVal = 1, # decrease if struggling to sample in the middle
+    runParallel = TRUE,
+    onDebug = FALSE,
+    noGibbsSteps = 1,
+    numberFittedPar = 3,
+    lowerParBounds = model$lowerParSupport_fitted,
+    upperParBounds = model$upperParSupport_fitted
+)
+
+model_null <- model
+model_null$evaluateLogLikelihood <- function(params, jump, datalist) {0}
+#sum(jump) * log(0.5)
+    
+
+
+#outputs <- rjmc_func(model_null, data_unif_A, settings)
+#saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_A_null.RDS"))
+#plot_outputs(outputs, data_unif_A, "fixed_I_unif_A", "null")
+
+#outputs <- rjmc_func(model, data_unif_A, settings)
+#saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_A.RDS"))
+#plot_outputs(outputs, data_unif_A, "fixed_I_unif_A", "cop")
+
+```
+
+# Prior for NIH study 
+
+```{r}
+
+df_sero_all <- read.csv(here::here("data", "nih_240517", "titres_all.csv"))
+
+ids_no_sero <- df_sero_all %>% filter(year == 2023) %>% filter(virus == "A/Sydney/5/2021e", vax_inf == "V", day == 0) 
+ids_no_sero_key_id <- ids_no_sero %>% pull(pid)
+ids_no_sero_key <- ids_no_sero %>% select(pid) %>% mutate(id = 1:nrow(.))
+N_ind <- ids_no_sero %>% nrow
+x_vals <- ids_no_sero %>% 
+  pull(titre) %>% `/`(., 5) %>% log2()
+
+N_known <- df_sero_all %>% filter(year == 2023, pid %in% ids_no_sero_key_id) %>% filter(virus == "A/Sydney/5/2021e", vax_inf == "I") %>% nrow
+N_ids <- df_sero_all %>% filter(year == 2023, pid %in% ids_no_sero_key_id) %>% filter(virus == "A/Sydney/5/2021e", vax_inf == "I") %>% pull(pid)
+ids_inf <- left_join(data.frame(pid = N_ids), ids_no_sero_key) %>% pull(id)
+
+y_I_NIH_known <- rep(0, N_ind)
+y_I_NIH_known[ids_inf] <- 1
+data_NIH <- create_data(x_vals, y_I_NIH_known)
+
+max_t <- 8
+exp_prior <- 0.05
+
+model <- create_model(exp_prior = 0.05, max_t = 8)
+
+model_null <- model
+model_null$evaluateLogLikelihood <- function(params, jump, datalist) {0}
+settings$lowerParBounds = model$lowerParSupport_fitted
+settings$upperParBounds = model$upperParSupport_fitted
+
+
+outputs <- rjmc_func(model_null, data_NIH, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "NIH_null.RDS"))
+plot_outputs(outputs, data_NIH, "NIH", "null")
+
+outputs <- rjmc_func(model, data_NIH, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "NIH.RDS"))
+plot_outputs(outputs, data_NIH, "NIH", "cop")
+
+
+```
+
+
+# Prior on the simualtion study 
+
+```{r}
+
+
+```
+
+# Prior for TRANSVIR study
+
+
+```{r}
+
+
+
+```
+
+
+
+```{r}
+
+# COP models 
+
+outputs <- rjmc_func(model, data_unif_A, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_A.RDS"))
+plot_outputs(outputs, data_unif_A, "fixed_I_unif_A", "cop")
+
+outputs <- rjmc_func(model, data_exp_A, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_exp_A.RDS"))
+plot_outputs(outputs, data_exp_A, "fixed_I_exp_A", "cop")
+
+outputs <- rjmc_func(model, data_unif_B, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_B.RDS"))
+plot_outputs(outputs, data_unif_B, "fixed_I_unif_B", "cop")
+
+outputs <- rjmc_func(model, data_exp_B, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_exp_B.RDS"))
+plot_outputs(outputs, data_exp_B, "fixed_I_exp_B", "cop")
+
+outputs <- rjmc_func(model, data_unif_C, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_C.RDS"))
+plot_outputs(outputs, data_unif_C, "fixed_I_unif_C", "cop")
+
+outputs <- rjmc_func(model, data_exp_C, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_exp_C.RDS"))
+plot_outputs(outputs, data_exp_C, "fixed_I_exp_C", "cop")
+
+# Null models 
+
+outputs <- rjmc_func(model_null, data_unif_A, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_A_null.RDS"))
+plot_outputs(outputs, data_unif_A, "fixed_I_unif_A", "null")
+
+outputs <- rjmc_func(model_null, data_exp_A, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_exp_A_null.RDS"))
+plot_outputs(outputs, data_exp_A, "fixed_I_exp_A", "null")
+
+outputs <- rjmc_func(model_null, data_unif_B, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_B_null.RDS"))
+plot_outputs(outputs, data_unif_B, "fixed_I_unif_B", "null")
+
+outputs <- rjmc_func(model_null, data_exp_B, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_exp_B_null.RDS"))
+plot_outputs(outputs, data_exp_B, "fixed_I_exp_B", "null")
+
+outputs <- rjmc_func(model_null, data_unif_C, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_unif_C_null.RDS"))
+plot_outputs(outputs, data_unif_C, "fixed_I_unif_C", "null")
+
+outputs <- rjmc_func(model_null, data_exp_C, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fixed_I_exp_C_null.RDS"))
+plot_outputs(outputs, data_exp_C, "fixed_I_exp_C", "null")
+
+```
+
+## Model A, fixed I list, posteriors
+
+```{r eval = FALSE}
+
+n_chains <- 1
+
+plot_outputs <- function(outputs, data_X, filename, typename) {
+ # outputs, data_unif_A, "fixed_I_unif_A", "null"
+  dir.create(here::here("outputs", "fits", "logit", filename))
+  N <- data_X$N_data
+  max_t <- max(data_X$obs_x)
+  logisticoutput <- map_df(1:n_chains, ~as.data.frame(outputs$mcmc[[.x]]) %>% mutate(chain = .x)) 
+
+  post_summary <- 1:nrow(logisticoutput) %>% 
+    map_df(
+      ~data.frame(
+        chain = logisticoutput[.x, 4],
+        t = seq(0, max_t, length = 50),
+        p = 1.0 / (1.0 + exp(- (logisticoutput[.x, 1] - (logisticoutput[.x, 1] / max_t + logisticoutput[.x, 2]) *  seq(0, max_t, length = 50)) ) )
+      )
+    ) %>% group_by(chain, t) %>% mean_qi(p)
+
+
+  p0 <- post_summary %>% 
+    ggplot() + 
+    geom_ribbon(aes(x = t, ymin = .lower, ymax = .upper, fill = as.character(chain)), alpha = 0.5) + 
+      geom_line(aes(x = t, y = p, color = as.character(chain))) + 
+      facet_wrap(vars(chain))
+  ggsave(here::here("outputs", "fits", "logit", filename, paste("cop_", typename, ".pdf")))
+
+  require(patchwork)
+
+  n_chain <- n_chains
+  s <<- 1
+  summary_post <- map_df(1:n_chain,
+    function(c) {
+      c <- 1
+      list_outputs_mode <- list()
+      j <- 1
+      for (i in 1:length(outputs$jump[[c]])) {
+        sample_E <- sum(outputs$jump[[c]][[i]][1, ])
+        sample_I <- sum(outputs$jump[[c]][[i]][2, ])
+
+        list_outputs_mode[[j]] <- data.frame(
+            E = sample_E,
+            I = sample_I,
+            sample = s,
+            chain = c
+        )
+        s <<- s + 1
+        j <- j + 1
+      }
+      list_outputs_mode %>% bind_rows()
+    }
+  )
+  
+  p1 <- summary_post %>% group_by(E, chain) %>% summarise(n = n()) %>%
+    ggplot() + geom_col(aes(x = E, y = n, fill = chain)) + 
+      geom_smooth(data = summary_post %>% group_by(E) %>%summarise(n = n()), aes(x = E, y = n))
+  p2 <- p1 + 
+    facet_grid(vars(chain))
+
+  p3 <- summary_post %>% group_by(I, chain) %>% summarise(n = n()) %>%
+    ggplot() + geom_col(aes(x = I, y = n, fill = chain)) + 
+      geom_smooth(data = summary_post %>% group_by(I) %>% summarise(n = n()), aes(x = I, y = n))
+  p4 <- p3 + 
+    facet_grid(vars(chain))
+  (p1 / p2) | (p3 / p4)
+  ggsave(here::here("outputs", "fits", "logit", filename, paste("E_dist_", typename, ".pdf")))
+
+  df_post <- map_df(1:n_chains, 
+    ~data.frame(
+      x = data_X$obs_x,
+      chain = .x,
+      exp_mean = outputs$jump[[1]] %>% unlist %>%
+            matrix(nrow = 200, byrow = TRUE) %>% apply(2, mean) %>% .[seq(1, N * 2, 2)],
+      inf_mean = outputs$jump[[1]] %>% unlist %>%
+            matrix(nrow = 200, byrow = TRUE) %>% apply(2, mean) %>% .[seq(2, N * 2, 2)]
+    ) 
+  )
+
+  logisticoutput_i <- logisticoutput %>% filter(chain == 1)
+  
+  full_sample_I <- map_df(1:N,
+    function(j) {
+      COP_i <- (1.0 / (1.0 + exp(- (logisticoutput_i[, 1] - (logisticoutput_i[, 1] / max_t + logisticoutput_i[, 2]) * data_X$obs_x[j]) ) )) 
+      E <- outputs$jump[[1]] %>% unlist %>%
+            matrix(nrow = 200, byrow = TRUE) %>% .[, 2*(j - 1) + 1] 
+      I <- outputs$jump[[1]] %>% unlist %>%
+            matrix(nrow = 200, byrow = TRUE) %>% .[, 2*(j - 1) + 2] 
+      data.frame(
+        s = 1:200,
+        i = j,
+        E = E,
+        I = I,
+        I_inf = E * COP_i
+      )
+    }
+  )
+
+  df_sum_I <- full_sample_I %>% group_by(s) %>% summarise(I_sum = sum(I), I_inf_sum = sum(I_inf))
+  p0A <- df_sum_I %>% 
+    ggplot() + geom_histogram(aes(I_sum))+ theme_bw() + labs(x = "Number of infections (bin)")
+  p0B <- df_sum_I %>% 
+    ggplot() + geom_histogram(aes(I_inf_sum))+ theme_bw() + labs(x = "Number of infections (cop)")
+
+  post_E <- outputs$jump[[1]] %>% unlist %>%
+        matrix(nrow = 200, byrow = TRUE) %>% apply(2, mean) %>% .[seq(1, 2*N, 2)]
+  post_I <- outputs$jump[[1]] %>% unlist %>%
+        matrix(nrow = 200, byrow = TRUE) %>% apply(2, mean)  %>% .[seq(2, 2*N, 2)]
+
+  logisticoutput_i <- logisticoutput %>% filter(chain == 1)
+  post_COP <- map(1:N, ~(1.0 / (1.0 + exp(- (logisticoutput_i[, 1] - (logisticoutput_i[, 1] / max_t + logisticoutput_i[, 2]) * data_X$obs_x[.x]) ) )) %>% mean) %>%
+    unlist
+
+  df_post_alt <- data.frame(
+    chain = 1,
+    x = data_X$obs_x,
+    post_COP = post_COP,
+    post_E = post_E,
+    post_I = (post_COP * post_E) 
+  )
+  
+  p1 <- df_post_alt %>% 
+    ggplot() + geom_point(aes(x = x, y = post_E, fill = as.character(chain)), shape = 21, alpha = 0.7) + theme_bw() + 
+    labs(x = "Pre-study titre", y = "Proportion of posterior exposed")
+  p2 <- df_post_alt %>% 
+    ggplot() + geom_point(aes(x = x, y = post_I, fill = as.character(chain)), shape = 21, alpha = 0.7) + theme_bw() + 
+    labs(x = "Pre-study titre", y = "Proportion of posterior infected")
+  p1 / p2 / (p0A + p0B)
+  ggsave(here::here("outputs", "fits", "logit", filename, paste("post_dist_", typename, ".pdf")))
+
+
+}
+
+```
+
+
+
+
+## Model B, E and I flexible
+
+```{r}
+
+model <- list(
+
+  lowerParSupport_fitted = c(0, 0),
+  upperParSupport_fitted = c(10, 10),
+
+  namesOfParameters = c("beta_0", "beta_1"),
+
+  sampleInitPrior = function(datalist) {
+    c(runif(1, 0, 10), runif(1, 0, 10))
+  },
+
+  sampleInitJump = function(params, datalist) {    
+    jump_new <- matrix(c(datalist$obs_y, datalist$obs_y), nrow = 2, byrow= TRUE)
+    jump_new
+  },
+
+  evaluateLogPrior = function(params, jump, datalist) {
+   # cat("in:  evaluateLogPrior")
+    p <- dunif(params[1], 0, 10, log = TRUE)
+    p <- p + dunif(params[2], 0, 10, log = TRUE)
+
+    N <- ncol(jump)
+    N_exp <- sum(jump[1, ])
+    N_inf <- sum(jump[2, ])
+    N_known <- sum(datalist$N_known)
+
+    p <- p + n * log(n) + log(1 / choose(N - N_known, N_exp - N_known)) 
+    p <- p + log(1 / choose(N_exp - N_known, N_inf - N_known))
+
+    p
+  },
+
+  evaluateLogLikelihood = function(params, jump, datalist) {
+   # cat("in:  evaluateLogLikelihood")
+    ll <- 0
+
+    beta0 <- params[1]
+    beta1 <- params[2]
+
+    y <- datalist$obs_y
+    x <- datalist$obs_x
+
+    N <- ncol(jump)
+    N_exp <- sum(jump[1, ])
+    N_inf <- sum(jump[2, ])
+    N_known <- sum(datalist$N_known)
+
+    N_data <- datalist$N
+
+    for (i in 1:N_data) {
+      if (jump[1, i] == 1) { # if exposed
+      #  p <- 1.0 / (1.0 + exp(- (beta0 + (-beta0 / 4 - beta1) *  x[i]) ) )
+        p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[i]) ) )
+        ll_i <- jump[2, i] * log(p) + (1 - jump[2, i]) * log(1 - p)
+        ll <- ll + ll_i
+      }
+    }
+    #ll <- 0
+    ll
+  },
+
+  sampleBirthProposal =  function(params, jump, i_idx, datalist) {
+    #cat("in:  sampleBirthProposal")
+    N <- ncol(jump)
+    N_exp <- sum(jump[1, ])
+    N_inf <- sum(jump[2, ])
+    N_known <- sum(datalist$N_known)
+
+    id <- sample(1:N, 1)
+    while(jump[1, id] == 1) {
+      id <- sample(1:N, 1)
+    }
+    jump[1, id] <- 1
+      
+    pid <<- id
+
+    x <- datalist$obs_x
+    beta0 <- params[1]
+    beta1 <- params[2]
+    p <- 1.0 / (1.0 + exp(- (beta0 - (beta0 / 4 + beta1) *  x[id]) ) )
+    jump[2, id] <- rbinom(1, 1, p)
+
+    #cat("sum(jump)", sum(jump), "\n")
+    jump
+
+  },
+
+  sampleDeathProposal = function(params, jump, i_idx, datalist) {
+    # cat("in:  sampleDeathProposal")
+
+    N <- ncol(jump)
+    N_exp <- sum(jump[1, ])
+    N_inf <- sum(jump[2, ])
+    N_known <- sum(datalist$N_known)
+
+    obs_y <- datalist$obs_y
+
+    id <- sample(1:N, 1)
+    while(jump[1, id] == 0 || obs_y[id] == 1) {
+      id <- sample(1:N, 1)
+    }
+    pid <<- id
+
+    x <- datalist$obs_x
+    beta0 <- params[1]
+    beta1 <- params[2]
+    p <- 1.0 / (1.0 + exp(- (beta0 - (beta0 / 4 + beta1) * x[id]) ) )
+
+    jump[1, id] <- 0
+    jump[2, id] <- 0
+    jump
+
+  },
+
+  evaluateBirthProposal = function(params, jump, i_idx, datalist) {
+    #cat("evaluateBirthProposal")
+    N <- ncol(jump)
+    N_exp <- sum(jump[1, ])
+    N_inf <- sum(jump[2, ])
+    N_known <- sum(datalist$N_known)
+    #cat("N_exp", N_exp, "\n")
+    #cat("N_known", N_known, "\n")
+
+    #cat("HERE: ",   log(N - N_exp + 1) - log(N_exp - N_known), "\n")
+    x <- datalist$obs_x
+    beta0 <- params[1]
+    beta1 <- params[2]
+    p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[pid]) ) )
+
+    log(N - N_exp + 1) - log(N_exp - N_known) - log(0.5)
+  },
+
+  evaluateDeathProposal = function(params, jump, i_idx, datalist) {
+    #      cat("in:  evaluateDeathProposal")
+
+    N <- ncol(jump)
+    N_exp <- sum(jump[1, ])
+    N_inf <- sum(jump[2, ])
+    N_known <- sum(datalist$N_known)
+
+    x <- datalist$obs_x
+    beta0 <- params[1]
+    beta1 <- params[2]
+    p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[pid]) ) )
+
+    log(N_exp - N_known + 1) - log(N - N_exp) + log(0.5)
+  },
+
+  sampleJump = function(params, jump, i_idx, datalist) {
+   # cat("in:  sampleJump")
+
+    N <- length(jump)
+    jump
+  },
+
+  sampleProposal = function(params, jump, datalist) {
+       #     cat("in:  sampleProposal")
+    N <- ncol(jump)
+    N_exp <- sum(jump[1, ])
+    N_inf <- sum(jump[2, ])
+    N_known <- sum(datalist$N_known)
+    #cat("N_exp:", N_exp)
+   # cat("N_known: ", N_known)
+
+    if (N_exp == N_known) {
+      q <- c(0.0, 0.67, 1.0)
+    } else if (N_exp == N) {
+      q <- c(0.33, 1.0, 1.0)
+    } else {
+      q <- c(0.33, 0.67, 1.0)
+    }
+    q
+  }
+)
+
+
+devtools::load_all()
+
+# Define the settings
+settings <-  list(
+    numberChainRuns = 4,
+    numberCores = 4,
+    iterations = 40000,
+    burninPosterior = 20000,
+    thin = 100,
+    consoleUpdates = 100,
+    onAdaptiveCov = TRUE,
+    updatesAdaptiveCov = 100,
+    burninAdaptiveCov = 1000,
+    updatesAdaptiveTemp = 10,
+    covarInitVal = 1e-6, # make very small if struggling to sample to beginning
+    covarInitValAdapt = 1e-2, # make very small if struggling to sample to beginning
+    covarMaxVal = 1, # decrease if struggling to sample in the middle
+    runParallel = TRUE,
+    onDebug = FALSE,
+    noGibbsSteps = 1,
+    numberFittedPar = 2,
+    lowerParBounds = model$lowerParSupport_fitted,
+    upperParBounds = model$upperParSupport_fitted
+)
+
+# Run the model 
+obs_y <- c(1, 1, 1, 0, rep(0, 26))
+obs_x <- c(0.0, 0.0, 0.0, 0.75, rep(1.5, 26))
+
+#obs_null <- seq(0, 15, 0.1)
+
+data_l <- list(
+    obs_y = obs_y,
+    obs_x = obs_x,
+    N_known = sum(obs_y),
+    N_data = length(obs_y),
+    N = length(obs_y)
+)
+
+outputs <- rjmc_func(model, data_l, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fit_flex.RDS"))
+
+```
+
+
+```{r}
+
+
+logisticoutput <- map_df(1:4, ~as.data.frame(outputs$mcmc[[.x]]) %>% mutate(chain = .x)) 
+
+post_summary <- 1:nrow(logisticoutput) %>% 
+  map_df(
+    ~data.frame(
+      chain = logisticoutput[.x, 3],
+      t = seq(0, 4, 0.1),
+      p = 1.0 / (1.0 + exp(- (logisticoutput[.x, 1] + logisticoutput[.x, 2] *  seq(0, 4, 0.1)) ) )
+    )
+  ) %>% group_by(chain, t) %>% mean_qi(p)
+
+post_summary %>% 
+  ggplot() + 
+  geom_ribbon(aes(x = t, ymin = .lower, ymax = .upper, fill = as.character(chain)), alpha = 0.5) + 
+    geom_line(aes(x = t, y = p, color = as.character(chain))) + 
+    facet_wrap(vars(chain))
+
+
+n_chain <- 4
+s <<- 1
+summary_post <- map_df(1:n_chain,
+  function(c) {
+    list_outputs_mode <- list()
+    j <- 1
+    for (i in 1:length(outputs$jump[[c]])) {
+      sample_i <- outputs$jump[[c]][[i]]
+      E <- sum(sample_i[1, ])
+      I <- sum(sample_i[2, ])
+      list_outputs_mode[[j]] <- data.frame(
+          E = E,
+          I = I,
+          sample = s,
+          chain = c
+      )
+      s <<- s + 1
+      j <- j + 1
+    }
+    list_outputs_mode %>% bind_rows()
+  }
+)
+
+
+p1 <- summary_post %>% group_by(E, chain) %>% summarise(n = n()) %>%
+  ggplot() + geom_col(aes(x = E, y = n, fill = chain)) + 
+    geom_smooth(data = summary_post %>% group_by(E) %>% summarise(n = n()), aes(x = E, y = n))
+p2 <- p1 + 
+  facet_grid(vars(chain))
+
+p1 / p2
+
+
+p1 <- summary_post %>% group_by(I, chain) %>% summarise(n = n()) %>%
+  ggplot() + geom_col(aes(x = I, y = n, fill = chain)) + 
+    geom_smooth(data = summary_post %>% group_by(I) %>% summarise(n = n()), aes(x = I, y = n))
+p2 <- p1 + 
+  facet_grid(vars(chain))
+
+p1 / p2
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+model_inf <- list(
+
+  lowerParSupport_fitted = c(-10, -10),
+  upperParSupport_fitted = c(10, 10),
+
+  namesOfParameters = c("beta_0", "beta_1"),
+
+  sampleInitPrior = function(datalist) {
+    c(rnorm(1, -10, 10), runif(1, -10, 10))
+  },
+
+  sampleInitJump = function(params, datalist) {    
+    jump_new <- as.matrix(datalist$obs_y, nrow = 1)    
+    jump_new
+  },
+
+  evaluateLogPrior = function(params, jump, datalist) {
+   # cat("in:  evaluateLogPrior")
+    p <- dunif(params[1], -10, 10, log = TRUE)
+    p <- p + dunif(params[2], -10, 10, log = TRUE)
+
+    N_E <-  datalist$N_known
+    N_I_known <- sum(datalist$obs_y_known)
+
+    N_I <- sum(jump)
+  #  N_known <- sum(datalist$obs_y)
+
+    p <- p + log(1 / choose(N_E - N_I_known, N_I - N_I_known))#log(1 / (2^(N - N_known) * choose(N - N_known, N_exp - N_known)))
+
+    p
+  },
+
+  evaluateLogLikelihood = function(params, jump, datalist) {
+   # cat("in:  evaluateLogLikelihood")
+    ll <- 0
+    N <- length(jump)
+
+    beta0 <- params[1]
+    beta1 <- params[2]
+
+    y <- datalist$obs_y
+    x <- datalist$obs_x
+
+    N_data <- datalist$N
+
+    for (i in 1:N_data) {
+      if (y[i] == 1) {
+        p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[i]) ) )
+        ll_i <- jump[i] * log(p) + (1 - jump[i]) * log(1 - p)
+        ll <- ll + ll_i
+      }
+    }
+   # ll <- 0
+    ll
+  },
+
+  sampleBirthProposal = function(params, jump, i_idx, datalist) {
+    #cat("in:  sampleBirthProposal")
+    N <- length(jump)
+    N_exp <- sum(jump)
+    y <- datalist$obs_y
+
+    N_I_known <- sum(datalist$obs_y_known)
+
+    id <- sample(1:N, 1)
+    while(jump[id] == 1 || y[id] == 0) {
+      id <- sample(1:N, 1)
+    }
+   # p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[i]) ) )
+
+    jump[id] <- 1
+    p_id <<- id
+    #cat("sum(jump)", sum(jump), "\n")
+    jump
+
+  },
+
+  sampleDeathProposal = function(params, jump, i_idx, datalist) {
+    # cat("in:  sampleDeathProposal")
+
+    N <- length(jump)
+    N_exp <- sum(jump)
+    obs_y <- datalist$obs_y
+    y <- datalist$obs_y
+
+    obs_y_known <- datalist$obs_y_known
+
+    id <- sample(1:N, 1)
+    while(jump[id] == 0 || y[id] == 0 || obs_y_known[id] == 1) {
+      id <- sample(1:N, 1)
+    }
+
+    jump[id] <- 0
+
+
+   # p_id <<- id
+    jump
+
+  },
+
+  evaluateBirthProposal = function(params, jump, i_idx, datalist) {
+    #cat("evaluateBirthProposal")
+    N <- length(jump)
+    N_I <- sum(jump)
+    N_E <- datalist$N_known
+    y <- datalist$obs_y
+    x <- datalist$obs_x
+    beta0 <- params[1]
+    beta1 <- params[2]
+    N_I_known <- sum(datalist$obs_y_known)
+
+    p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[p_id]) ) )
+
+    #cat("HERE: ",   log(N - N_exp + 1) - log(N_exp - N_known), "\n")
+
+    log(N_E - N_I + 1) - log(N_I - N_I_known)
+  },
+
+  evaluateDeathProposal = function(params, jump, i_idx, datalist) {
+    #      cat("in:  evaluateDeathProposal")
+
+    N <- length(jump)
+    N_I <- sum(jump)
+    N_E <- datalist$N_known
+    N_I_known <- sum(datalist$obs_y_known)
+    x <- datalist$obs_x
+    beta0 <- params[1]
+    beta1 <- params[2]
+
+    p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[p_id]) ) )
+
+    log(N_I - N_I_known + 1) - log(N_E - N_I) 
+  },
+
+  sampleJump = function(params, jump, i_idx, datalist) {
+   # cat("in:  sampleJump")
+
+    N <- length(jump)
+    jump
+  },
+
+  sampleProposal = function(params, jump, datalist) {
+       #     cat("in:  sampleProposal")
+    N <- length(jump)
+    #cat(N)
+    N_I <- sum(jump)
+    N_E <- datalist$N_known
+    #cat("N_exp:", N_exp)
+   # cat("N_known: ", N_known)
+    N_I_known <- sum(datalist$obs_y_known)
+
+   # p <- 1.0 / (1.0 + exp(- (beta0 + beta1 *  x[i]) ) )
+
+    if (N_I == N_I_known) {
+      q <- c(0.0, 1.0, 1.0)
+    } else if (N_E == N_I) {
+      q <- c(0.0, 1.0, 1.0)
+    } else {
+      q <- c(0.0, 1.0, 1.0)
+    }
+    q
+  }
+
+)
+
+devtools::load_all()
+
+# Define the settings
+settings <-  list(
+    numberChainRuns = 4,
+    numberCores = 4,
+    iterations = 80000,
+    burninPosterior = 40000,
+    thin = 100,
+    consoleUpdates = 100,
+    onAdaptiveCov = TRUE,
+    updatesAdaptiveCov = 100,
+    burninAdaptiveCov = 1000,
+    updatesAdaptiveTemp = 10,
+    covarInitVal = 1e-6, # make very small if struggling to sample to beginning
+    covarInitValAdapt = 1e-2, # make very small if struggling to sample to beginning
+    covarMaxVal = 1, # decrease if struggling to sample in the middle
+    runParallel = TRUE,
+    onDebug = FALSE,
+    noGibbsSteps = 1,
+    numberFittedPar = 2,
+    lowerParBounds = model$lowerParSupport_fitted,
+    upperParBounds = model$upperParSupport_fitted
+)
+
+# Run the model 
+obs_y <- c(rep(1, 15), rep(0, 15))
+obs_y_known <- c(rep(1, 2), rep(0, 28))
+
+obs_x <- c(0.0, 0.0, 0.5, 0.5, rep(1.5, 10), rep(3.5, 16))
+
+N_known <- sum(obs_y)
+#obs_null <- seq(0, 15, 0.1)
+
+data_l <- list(
+    obs_y = obs_y,
+    obs_y_known = obs_y_known,
+    obs_x = obs_x,
+    N_known = sum(obs_y),
+    N_data = length(obs_y)
+)
+
+outputs <- rjmc_func(model_inf, data_l, settings)
+saveRDS(outputs, here::here("outputs", "fits", "logit", "fit_fixed_E.RDS"))
+
+```
+
+```{r}
+
+logisticoutput <- map_df(1:4, ~as.data.frame(outputs$mcmc[[.x]]) %>% mutate(chain = .x)) 
+
+post_summary <- 1:nrow(logisticoutput) %>% 
+  map_df(
+    ~data.frame(
+      chain = logisticoutput[.x, 3],
+      t = seq(0, 4, 0.1),
+      p = 1.0 / (1.0 + exp(- (logisticoutput[.x, 1] + logisticoutput[.x, 2] *  seq(0, 4, 0.1)) ) )
+    )
+  ) %>% group_by(chain, t) %>% mean_qi(p)
+
+post_summary %>% 
+
+  ggplot() + 
+  geom_ribbon(aes(x = t, ymin = .lower, ymax = .upper, fill = as.character(chain)), alpha = 0.5) + 
+    geom_line(aes(x = t, y = p, color = as.character(chain))) + 
+    facet_wrap(vars(chain))
+ 
+
+```
+
+
+```{R}
+
+outputs$jump[[1]][[2]]
+
+n_chain <- 4
+s <<- 1
+summary_post <- map_df(1:n_chain,
+  function(c) {
+    list_outputs_mode <- list()
+    j <- 1
+    for (i in 1:length(outputs$jump[[c]])) {
+      sample_i <- sum(outputs$jump[[c]][[i]])
+      list_outputs_mode[[j]] <- data.frame(
+          I = sample_i,
+          sample = s,
+          chain = c
+      )
+      s <<- s + 1
+      j <- j + 1
+    }
+    list_outputs_mode %>% bind_rows()
+  }
+)
+
+summary_post %>% 
+  ggplot() + geom_line(aes(y = I, x = sample, color = as.character(chain)))
+
+p1 <- summary_post %>% group_by(I, chain) %>% summarise(n = n()) %>%
+  ggplot() + geom_col(aes(x = I, y = n, fill = chain)) + 
+    geom_smooth(data = summary_post %>% group_by(I) %>% summarise(n = n()), aes(x = I, y = n))
+p2 <- p1 + 
+  facet_grid(vars(chain))
+
+p1 / p2
+
+```

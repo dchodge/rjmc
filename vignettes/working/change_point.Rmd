@@ -1,0 +1,241 @@
+Get started: a very simple working example 
+
+## Load the packages
+
+```{r}
+
+# https://people.eecs.berkeley.edu/~jordan/sail/readings/archive/RJMCMC-green.pdf
+#install.packages("devtools")
+#library(devtools)
+devtools::load_all()
+library(lubridate)
+library(patchwork)
+library(tidybayes)
+library(ggdist)
+
+range <- 100
+
+```
+
+
+```{r}
+
+model <- list(
+
+  lowerParSupport_fitted = c(-8),
+  upperParSupport_fitted = c(8),
+
+  namesOfParameters = c("sigma"),
+
+  sampleInitPrior = function(datalist) {
+    rnorm(1, 0, 1)
+  },
+
+  sampleInitJump = function(params, datalist) {
+    H <- c(1, 1)
+    P <- c(0, range/2)
+    jump_new <- matrix(c(H, P), nrow = 2, byrow = TRUE)
+    jump_new
+  },
+
+  evaluateLogPrior = function(params, jump, datalist) {
+
+    p <- dnorm(params[1], 0, 1, log = TRUE)
+
+    H_vec <- jump[1, ]
+    for(i in 1:length(H_vec) ) {
+        p <- p + H_vec(H_vec[i], 1, 300, log = TRUE)
+    }
+    p_vec <- jump[2, ]
+    for(i in 1:length(mu_vec) ) {
+        p <- p + dunif(mu_vec[i], 0, 20, log = TRUE)
+    }
+
+  #  cat("prior: ", str(p))
+    p
+  },
+
+  evaluateLogLikelihood = function(params, jump, datalist) {
+   # cat("in:  evaluateLogLikelihood")
+    ll <- 0
+    N <- ncol(jump)
+    p_vec <- jump[1, ]
+
+    mu_vec <- jump[2, ]
+    sigma_vec <- jump[3, ]
+
+    z <- datalist$obs
+    N_data <- datalist$N_data
+    sigma <- params[1]
+
+    for (i in 1:N_data) {
+        i_x = 0
+        for (j in 1:N) {
+            i_x <- i_x + p_vec[j] * dnorm(z[i], mu_vec[j], sigma_vec[j])
+        }
+        ll <- ll + log(i_x)
+    }
+
+   # cat("loglik: ", str(ll) )
+    ll
+  },
+
+  sampleBirthProposal =  function(params, jump, i_idx, datalist) {
+   # cat("in:  sampleBirthProposal")
+
+    p_new_sample <- runif(1, 0, 1)
+    p_new <- c(jump[1, ] * (1 - p_new_sample), p_new_sample)
+    mu_new_sample <- runif(1, 0, 20)
+    mu_new <- c(jump[2, ], mu_new_sample)
+    sigma_new_sample <- runif(1, 0.3, 3)
+    sigma_new <- c(jump[3, ], sigma_new_sample)
+    jump_new <- matrix(c(p_new, mu_new, sigma_new), nrow = 3, byrow = TRUE)
+    jump_new
+  },
+
+  sampleDeathProposal = function(params, jump, i_idx, datalist) {
+   #   cat("in:  sampleDeathProposal")
+
+    N <- ncol(jump)
+    jump_remove <- jump[, i_idx]
+    jump_new <- jump[, -i_idx]
+    jump_new[1, ] <- c(jump_new[1, ] / (1 - jump_remove[1]))
+    jump_new
+  },
+
+  evaluateBirthProposal = function(params, jump, i_idx, datalist) {
+    #    cat("in:  evaluateBirthProposal")
+
+    N <- ncol(jump)
+    log(1 / (N * dunif(jump[2, N], 0, 20 ) ))
+  },
+
+  evaluateDeathProposal = function(params, jump, i_idx, datalist) {
+     #     cat("in:  evaluateDeathProposal")
+
+    N <- ncol(jump)
+    log((N) * dunif(jump[2, i_idx], 0, 20 ) ) 
+  },
+
+  sampleJump = function(params, jump, i_idx, datalist) {
+    #        cat("in:  sampleJump")
+
+    N <- ncol(jump)
+    jump_update <- jump[, i_idx]
+
+    p_new <- min(max(jump_update[1] + rnorm(1, 0, 0.01), 0), 1)
+    diff = (jump_update[1] - p_new) / (N - 1)
+    p_new_vew <- jump[1, ] + diff
+    p_new_vew[i_idx] <- p_new
+    jump[1, ] <- p_new_vew
+
+    jump[2, i_idx] <- jump_update[2] + rnorm(1, 0, 0.1)
+    jump[3, i_idx] <- max(jump_update[3] + rnorm(1, 0, 0.1), 0.3)
+
+    jump
+  },
+
+  sampleProposal = function(params, jump, datalist) {
+    N <- ncol(jump)
+    if (N == 0) {
+      q <- c(0.0, 0.67, 1.0)
+    } else if (N == 20) {
+      q <- c(0.33, 1.0, 1.0)
+    } else {
+      q <- c(0.33, 0.67, 1.0)
+    }
+    q
+  }
+
+)
+
+```
+
+# Define settings and run the model, (this won't run as made the data up)
+
+```{r eval = FALSE}
+
+devtools::load_all()
+
+# Define the settings
+settings <-  list(
+    numberChainRuns = 4,
+    numberCores = 4,
+    iterations = 4000,
+    burninPosterior = 2000,
+    thin = 10,
+    runParallel = FALSE,
+    onDebug = FALSE
+)
+
+m <- 3
+# Run the model 
+obs <- c(sample(rnorm(100, 3, 1), 30 * m, replace = TRUE),
+    sample(rnorm(100, 6, 0.5), 70 * m, replace = TRUE), 
+    sample(rnorm(100, 12, 2), 100 * m, replace = TRUE))
+
+#obs_null <- seq(0, 15, 0.1)
+
+data_l <- list(
+    obs = obs,
+    N_data = length(obs)
+)
+
+outputs <- rjmc_func(model, data_l, settings)
+saveRDS(outputs, here::here("outputs", "fits", "mixture_norm", "fit_sim_null.RDS"))
+
+```
+
+```{r}
+
+require(patchwork)
+
+n_chain <- 4
+
+tables_length <- get_lengths(n_chain)
+
+mode_post <- names(sort(tables_length, decreasing = TRUE))[1]
+mix_size <- mode_post
+
+#post_process_2 <- get_clean_posterior(outputs, "2", 4)
+post_process_3 <- get_clean_posterior(outputs, "3", 4)
+post_process_4 <- get_clean_posterior(outputs, "4", 4)
+post_process_5 <- get_clean_posterior(outputs, "5", 4)
+
+prop <- tables_length / sum(tables_length)
+plotl <- prop[mix_size]
+
+p0 <- ggplot() + geom_col(aes(x = names(prop), y = prop)) + ylim(0, 1) + theme_minimal() + 
+  labs(x = "Number of mixture components", y = "Proportion of posterior distribution")
+
+p1_anot <- get_posterior_component_size("3", tables_length, post_process_3, data_l)
+p2_anot <- get_posterior_component_size("4", tables_length, post_process_4, data_l)
+p3_anot <- get_posterior_component_size("5", tables_length, post_process_5, data_l)
+
+p0 / p1_anot / p2_anot / p3_anot
+ggsave( here::here("outputs", "fits", "mixture_norm", "posterir_fig_sum.pdf"))
+
+
+```
+
+
+
+
+```{r}
+
+p1 <- summary_post %>% ggplot() +    
+    geom_vline(xintercept = c(3, 6, 12), color = "red", size = 2) +
+    geom_histogram(aes(mu), color = "black", alpha = 0.9) + theme_bw() + 
+  xlim(0, 17)
+
+p2 <- summary_post %>% ggplot() +     
+    geom_boxplot(aes(x = as.character(order), y = p)) + 
+    theme_bw()
+
+p3 <- summary_post %>% ggplot() +     
+    geom_boxplot(aes(x = as.character(order), y = sigma)) + 
+    theme_bw()
+
+p1 + p2 + p3
+
+```
