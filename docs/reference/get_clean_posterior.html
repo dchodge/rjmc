@@ -19,7 +19,7 @@ and the trajectory of the posterior distribution."><!-- mathjax --><script src="
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">rjmc</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.0.0.9000</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
       </span>
     </div>
 
@@ -94,7 +94,7 @@ using a sequence of x-values (e.g., for visualization of the mixture distributio
 <li><p>Extracts parameters: mixing proportions (<code>p</code>), means (<code>mu</code>), and standard deviations (<code>sigma</code>).</p></li>
 </ul></li>
 <li><p><strong>Generate Posterior Trajectory</strong>:</p><ul><li><p>Uses the filtered posterior parameters to calculate the PDF of the mixture distribution over a range of x-values.</p></li>
-<li><p>Aggregates the trajectories across samples using <code>mean_qi()</code> to summarize uncertainty.</p></li>
+<li><p>Aggregates the trajectories across samples using <code><a href="http://mjskay.github.io/ggdist/reference/point_interval.html" class="external-link">mean_qi()</a></code> to summarize uncertainty.</p></li>
 </ul></li>
 </ol></div>
 
