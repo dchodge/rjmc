@@ -280,7 +280,6 @@ model <- list(
   },
 
   sampleBirthProposal =  function(params, jump, i_idx, datalist) {
-
     p_new_sample <- runif(1, 0, 1)
     p_new <- c(jump[1, ] * (1 - p_new_sample), p_new_sample)
     mu_new_sample <- runif(1, 0, 20)
@@ -331,7 +330,7 @@ model <- list(
 
   sampleProposal = function(params, jump, datalist) {
     N <- ncol(jump)
-    if (N == 1) {
+    if (N == 2) {
       q <- c(0.0, 0.67, 1.0)
     } else if (N == 20) {
       q <- c(0.33, 1.0, 1.0)

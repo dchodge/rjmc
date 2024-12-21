@@ -159,7 +159,6 @@ namespace rjmc_full{
             if (this->onDebug) Rcpp::Rcout << "In: initialiseClass" << std::endl;
 
             if (this->onDebug) Rcpp::Rcout << "In: Extract data from dataList" << std::endl;
-
             this->dataList = dataList;            
             this->dataListCPP = as<List>(dataList);
           //  this->fittedParamNames = this->dataListCPP["par_names"];
@@ -168,7 +167,6 @@ namespace rjmc_full{
 
             // Useful for internal functions
             this->N_data = this->dataListCPP["N_data"];
-            
 
             this->adaptiveGibbsSD = VectorXd::Constant(this->N, 0);
             this->counterAdaptiveGibbs = VectorXd::Zero(this->N);
@@ -421,25 +419,6 @@ namespace rjmc_full{
             evaluateMetropolisRatio();
         }
 
-        // Sample an individual who is exposed in current chain
-        int sampleExposed() {
-            if (this->onDebug) Rcpp::Rcout << "In: sampleExposed" << std::endl;
-
-            int s = uniformDiscreteDist(0, this->N - 1); 
-            while ((this->knownInfsVec(s) == 1) || (this->currentJump(s) == -1) ) {
-                s = uniformDiscreteDist(0, this->N - 1); 
-            }
-            return s;
-        }
-
-        // Sample an individual who is not exposed in current chain
-        int sampleNotExposed() {
-            int s = uniformDiscreteDist(0, this->N - 1); 
-            while ((this->knownInfsVec(s) == 1) || (this->currentJump(s) != -1 )) {
-                s = uniformDiscreteDist(0, this->N - 1); 
-            }
-            return s;
-        }
 
         // Sample an new infection status for an exposed individual
      
@@ -453,33 +432,23 @@ namespace rjmc_full{
             if (this->onDebug) Rcpp::Rcout << "get q_prob" << std::endl;
            // if (this->onDebug) Rcpp::Rcout << "this->knownInfsN: " << this->knownInfsN << std::endl;
 
-
             if (this->knownExpInd) {
                 q_prob << 0, 1, 1;
             } else {
                 q_prob = this->sampleProposal(this->currentSample, this->currentJump, this->dataList);
-             //   if (this->currentJump.cols() == 2) {
-             //       q_prob << 0, 0.67, 1.0;
-            //    } else if (this->currentJump.cols() == 100) {
-            ///        q_prob << 0.33, 1.0, 0;
-           //     } else {
-           //         q_prob << 0.33, 0.67, 1.0;
-          //      }
             }
-            //Rcpp::Rcout << "q: " << q << std::endl;
-
-            // Substract a value
             if (this->onDebug) Rcpp::Rcout << "Find jumping" << std::endl;
             if (q < q_prob(0)) {
              //   Rcpp::Rcout << "In deletion" << std::endl;
                 int N = this->currentJump.cols();
-                this->currJumpIdx = uniformDiscreteDist(1, N); // length is n_ - 114
+                this->currJumpIdx = uniformDiscreteDist(1, N);
                 this->proposalJump = sampleDeathProposal(this->currentSample, this->currentJump, this->currJumpIdx, this->dataList); // length now n_ - 144 - 1
                 this->currJumpType = 0;
                 //this->propInferredExpN = this->currInferredExpN - 1;
             // Stay same
             } else if (q < q_prob(1)) {
                // Rcpp::Rcout << "In stay same" << std::endl;
+                int N = this->currentJump.cols();
                 this->propInferredExpN = this->currInferredExpN;
                 if(this->currInferredExpN != this->knownInfsN) {
                     this->currJumpIdx = uniformDiscreteDist(1, N); // length is n_ - 114
@@ -507,14 +476,14 @@ namespace rjmc_full{
                 selectProposalDist(false);
 
                 for (int i = 0; i < this->noGibbsSteps; i++) { 
-                    int i_idx = uniformDiscreteDist(1, this->currentJump.cols()); // stuck here
+                    int N = this->currentJump.cols();
+                    int i_idx = uniformDiscreteDist(1, N); // stuck here
                     this->proposalJump = sampleJump(this->proposalSample, this->currentJump, i_idx, this->dataList);
                 }
                 this->proposedLogPosterior = this->evalLogPosterior(this->proposalSample, this->proposalJump, this->currentCovarianceMatrix, this->dataList);
 
                 evaluateMetropolisRatio();
                 updateJumpHistoric();
-               // updateProposalGibbs();
            
         }
         
@@ -660,17 +629,6 @@ namespace rjmc_full{
                     errorCheckMatrixValid(this->adaptiveCovarianceMat);
                 }
             }
-        }
-
-        void updateProposalGibbs()
-        {
-            // Update adaptive proposal stuff
-            this->counterAdaptiveGibbs(this->gibbsIdx)++;
-            double gainFactor = pow(this->counterAdaptiveGibbs(this->gibbsIdx), -0.5);
-            this->adaptiveGibbsSD(this->gibbsIdx) += gainFactor*(this->alpha - 0.44);
-
-            errorCheckNumberValid(this->adaptiveGibbsSD(this->gibbsIdx));
-            trimAdaptiveValues(this->adaptiveGibbsSD(this->gibbsIdx));
         }
         
         void trimNonAdaptiveValues(double value)
