@@ -71,7 +71,7 @@
                         <h4 data-toc-skip class="author">David
 Hodgson</h4>
             
-            <h4 data-toc-skip class="date">2024-12-21</h4>
+            <h4 data-toc-skip class="date">2024-12-22</h4>
       
 
       <div class="hidden name"><code>Ex1_mixture.Rmd</code></div>
@@ -139,8 +139,6 @@ Gaussian components.</li>
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>k</mi></msub><annotation encoding="application/x-tex">\sigma_k</annotation></semantics></math>).</li>
 <li>Mixing proportion
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>π</mi><mi>k</mi></msub><annotation encoding="application/x-tex">\pi_k</annotation></semantics></math>).</li>
-<li>
-</li>
 </ul>
 </li>
 <li><h3 id="key-parameters">2.1 <strong>Key
@@ -191,13 +189,19 @@ mixture.</li>
 <p>Therefore, we simulate a dataset from a predefined mixture model with
 known parameters
 (<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>,</mo><msub><mi>μ</mi><mi>k</mi></msub><mo>,</mo><msub><mi>σ</mi><mi>k</mi></msub><mo>,</mo><msub><mi>π</mi><mi>k</mi></msub></mrow><annotation encoding="application/x-tex">K, \mu_k, \sigma_k, \pi_k</annotation></semantics></math>).
-Here, - K = 3 -
+Here,</p>
+<ul>
+<li>K = 3</li>
+<li>
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>μ</mi><mi>k</mi></msub><annotation encoding="application/x-tex">\mu_k</annotation></semantics></math>
-= 2, 6, 12 -
+= 2, 6, 12</li>
+<li>
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>k</mi></msub><annotation encoding="application/x-tex">\sigma_k</annotation></semantics></math>
-= 1, 0.5, 1 -
+= 1, 0.5, 1</li>
+<li>
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>π</mi><mi>k</mi></msub><annotation encoding="application/x-tex">\pi_k</annotation></semantics></math>
-= 0.3, 0.7, 1</p>
+= 0.3, 0.7, 1</li>
+</ul>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fl">5</span></span>
 <span><span class="co"># Run the model </span></span>
@@ -653,24 +657,35 @@ Below is a breakdown of its components:</p>
 <strong>1. Define Settings</strong><a class="anchor" aria-label="anchor" href="#define-settings"></a>
 </h4>
 <p>The <code>settings</code> list specifies the configuration for the
-RJMCMC run: - <strong><code>numberChainRuns</code></strong>: Specifies
-the number of independent MCMC chains to run (e.g., 4 chains). -
-<strong><code>numberCores</code></strong>: Indicates the number of CPU
-cores allocated for computation. Parallel processing is possible if
-<code>runParallel = TRUE</code>. -
+RJMCMC run:</p>
+<ul>
+<li>
+<strong><code>numberChainRuns</code></strong>: Specifies the number
+of independent MCMC chains to run (e.g., 4 chains).</li>
+<li>
+<strong><code>numberCores</code></strong>: Indicates the number of
+CPU cores allocated for computation. Parallel processing is possible if
+<code>runParallel = TRUE</code>.</li>
+<li>
 <strong><code>iterations</code></strong>: Sets the total number of
-iterations for each MCMC chain (e.g., 4000 iterations). -
+iterations for each MCMC chain (e.g., 4000 iterations).</li>
+<li>
 <strong><code>burninPosterior</code></strong>: Defines the number of
-initial iterations to discard as burn-in (e.g., 2000 iterations). -
+initial iterations to discard as burn-in (e.g., 2000 iterations).</li>
+<li>
 <strong><code>thin</code></strong>: Thinning interval to reduce
 autocorrelation by retaining only every
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>-th
-sample (e.g., every 10th sample). -
+sample (e.g., every 10th sample).</li>
+<li>
 <strong><code>runParallel</code></strong>: Boolean flag controlling
 whether chains are run in parallel (<code>FALSE</code> here indicates
-sequential execution). - <strong><code>onDebug</code></strong>: Boolean
-flag for enabling debugging mode, which can output additional
-information during execution.</p>
+sequential execution).</li>
+<li>
+<strong><code>onDebug</code></strong>: Boolean flag for enabling
+debugging mode, which can output additional information during
+execution.</li>
+</ul>
 <hr>
 </div>
 <div class="section level4">
@@ -750,15 +765,8 @@ probabilities for the number of components, with the true value
 highlighted by a red vertical line:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="va"><a href="https://patchwork.data-imaginist.com" class="external-link">patchwork</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="va"><a href="https://purrr.tidyverse.org/" class="external-link">purrr</a></span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## Loading required package: purrr</span></span></code></pre>
-<pre><code><span><span class="co">## </span></span>
-<span><span class="co">## Attaching package: 'purrr'</span></span></code></pre>
-<pre><code><span><span class="co">## The following objects are masked from 'package:rjmc':</span></span>
-<span><span class="co">## </span></span>
-<span><span class="co">##     accumulate, when</span></span></code></pre>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="va"><a href="https://purrr.tidyverse.org/" class="external-link">purrr</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">require</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">n_chain</span> <span class="op">&lt;-</span> <span class="fl">4</span></span>
 <span></span>
@@ -773,11 +781,6 @@ highlighted by a red vertical line:</p>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_bar.html" class="external-link">geom_col</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">dim</span>, y <span class="op">=</span> <span class="va">post</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> </span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_abline.html" class="external-link">geom_vline</a></span><span class="op">(</span>xintercept <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"3"</span><span class="op">)</span>, color <span class="op">=</span> <span class="st">"red"</span>, size <span class="op">=</span> <span class="fl">4</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"Number of mixture components"</span>, y <span class="op">=</span> <span class="st">"Posterior probability"</span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## Warning: Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.</span></span>
-<span><span class="co">## <span style="color: #00BBBB;">ℹ</span> Please use `linewidth` instead.</span></span>
-<span><span class="co">## <span style="color: #555555;">This warning is displayed once every 8 hours.</span></span></span>
-<span><span class="co">## <span style="color: #555555;">Call `lifecycle::last_lifecycle_warnings()` to see where this warning was</span></span></span>
-<span><span class="co">## <span style="color: #555555;">generated.</span></span></span></code></pre>
 <p><img src="Ex1_mixture_files/figure-html/unnamed-chunk-3-1.png" width="672"></p>
 </div>
 <div class="section level3">
@@ -789,7 +792,7 @@ components. Histograms are used to visualize the posterior samples, with
 the true values highlighted by red vertical lines.</p>
 <p>The histograms provide insights into the precision of the RJMCMC
 algorithm in recovering the true parameter values.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">posterior_sample</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://purrr.tidyverse.org/reference/map_dfr.html" class="external-link">map_df</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span>, </span>
 <span>  <span class="kw">function</span><span class="op">(</span><span class="va">y</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="fu"><a href="https://purrr.tidyverse.org/reference/map_dfr.html" class="external-link">map_df</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">outputs</span><span class="op">$</span><span class="va">jump</span><span class="op">[[</span><span class="va">y</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>, </span>
@@ -816,11 +819,6 @@ algorithm in recovering the true parameter values.</p>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_histogram.html" class="external-link">geom_histogram</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span><span class="va">sigma</span><span class="op">)</span>, color <span class="op">=</span> <span class="st">"black"</span>, alpha <span class="op">=</span> <span class="fl">0.7</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_bw</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">p1</span> <span class="op">/</span> <span class="va">p2</span> <span class="op">/</span> <span class="va">p3</span></span></code></pre></div>
-<pre><code><span><span class="co">## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 2 rows containing missing values or values outside the scale range</span></span>
-<span><span class="co">## (`geom_bar()`).</span></span></code></pre>
-<pre><code><span><span class="co">## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</span></span>
-<span><span class="co">## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</span></span></code></pre>
 <p><img src="Ex1_mixture_files/figure-html/unnamed-chunk-4-1.png" width="672"></p>
 </div>
 <div class="section level3">
@@ -834,7 +832,7 @@ selected values of K.</p>
 <p>The first plot below shows the posterior proportions for the number
 of components (K). Subsequent plots visualize the posterior trajectories
 for p, μ, and σ for K = 3 and K = 4.</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">tables_length</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_lengths.html">get_lengths</a></span><span class="op">(</span><span class="va">outputs</span>, <span class="va">n_chain</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">mode_post</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="va">tables_length</span>, decreasing <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span></span>
@@ -849,42 +847,10 @@ for p, μ, and σ for K = 3 and K = 4.</p>
 <span><span class="va">p0</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_bar.html" class="external-link">geom_col</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">prop</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">prop</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/lims.html" class="external-link">ylim</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> </span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"Number of mixture components"</span>, y <span class="op">=</span> <span class="st">"Proportion of posterior distribution"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">p1_anot</span> <span class="op">&lt;-</span> <span class="fu">get_posterior_component_size</span><span class="op">(</span><span class="st">"3"</span>, <span class="va">tables_length</span>, <span class="va">post_process_3</span>, <span class="va">data_l</span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## Warning: The dot-dot notation (`..density..`) was deprecated in ggplot2 3.4.0.</span></span>
-<span><span class="co">## <span style="color: #00BBBB;">ℹ</span> Please use `after_stat(density)` instead.</span></span>
-<span><span class="co">## <span style="color: #00BBBB;">ℹ</span> The deprecated feature was likely used in the <span style="color: #0000BB;">rjmc</span> package.</span></span>
-<span><span class="co">##   Please report the issue to the authors.</span></span>
-<span><span class="co">## <span style="color: #555555;">This warning is displayed once every 8 hours.</span></span></span>
-<span><span class="co">## <span style="color: #555555;">Call `lifecycle::last_lifecycle_warnings()` to see where this warning was</span></span></span>
-<span><span class="co">## <span style="color: #555555;">generated.</span></span></span></code></pre>
-<pre><code><span><span class="co">## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 4 rows containing non-finite outside the scale range</span></span>
-<span><span class="co">## (`stat_bin()`).</span></span></code></pre>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">p2_anot</span> <span class="op">&lt;-</span> <span class="fu">get_posterior_component_size</span><span class="op">(</span><span class="st">"4"</span>, <span class="va">tables_length</span>, <span class="va">post_process_4</span>, <span class="va">data_l</span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 4 rows containing non-finite outside the scale range</span></span>
-<span><span class="co">## (`stat_bin()`).</span></span></code></pre>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">p0</span> <span class="op">/</span> <span class="va">p1_anot</span> <span class="op">/</span> <span class="va">p2_anot</span></span></code></pre></div>
-<pre><code><span><span class="co">## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 4 rows containing non-finite outside the scale range</span></span>
-<span><span class="co">## (`stat_bin()`).</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 2 rows containing missing values or values outside the scale range</span></span>
-<span><span class="co">## (`geom_bar()`).</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 1503 rows containing non-finite outside the scale range</span></span>
-<span><span class="co">## (`geom_slabinterval()`).</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 10 rows containing missing values or values outside the scale range</span></span>
-<span><span class="co">## (`geom_line()`).</span></span></code></pre>
-<pre><code><span><span class="co">## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 4 rows containing non-finite outside the scale range</span></span>
-<span><span class="co">## (`stat_bin()`).</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 2 rows containing missing values or values outside the scale range</span></span>
-<span><span class="co">## (`geom_bar()`).</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 2004 rows containing non-finite outside the scale range</span></span>
-<span><span class="co">## (`geom_slabinterval()`).</span></span></code></pre>
-<pre><code><span><span class="co">## Warning: Removed 10 rows containing missing values or values outside the scale range</span></span>
-<span><span class="co">## (`geom_line()`).</span></span></code></pre>
+<span><span class="va">p1_anot</span> <span class="op">&lt;-</span> <span class="fu">get_posterior_component_size</span><span class="op">(</span><span class="st">"3"</span>, <span class="va">tables_length</span>, <span class="va">post_process_3</span>, <span class="va">data_l</span><span class="op">)</span></span>
+<span><span class="va">p2_anot</span> <span class="op">&lt;-</span> <span class="fu">get_posterior_component_size</span><span class="op">(</span><span class="st">"4"</span>, <span class="va">tables_length</span>, <span class="va">post_process_4</span>, <span class="va">data_l</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">p0</span> <span class="op">/</span> <span class="va">p1_anot</span> <span class="op">/</span> <span class="va">p2_anot</span></span></code></pre></div>
 <p><img src="Ex1_mixture_files/figure-html/unnamed-chunk-5-1.png" width="672"></p>
 <p>This analysis highlights the posterior support for different numbers
 of components and provides a detailed summary of the recovered
