@@ -36,6 +36,7 @@ Make sure you have R installed on your system. You can download R from [https://
 
 You can install the development version of `rjmc` from GitHub using the `devtools` package. If you don't already have `devtools` installed, you can install it with:
 
+
 ```{r}
 
 install.packages("devtools") 
