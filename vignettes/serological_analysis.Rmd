@@ -1,0 +1,275 @@
+---
+title: "Serology Data Analysis with Mixture Model"
+author: "Adam Kucharski"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Serology Data Analysis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(devtools)
+devtools::load_all()
+library(lubridate)
+library(patchwork)
+library(tidybayes)
+library(ggdist)
+library(readr)
+library(dplyr)
+
+# Using more than one core might fail on windows
+if (.Platform$OS.type == "windows") {
+  mc.cores <- 1
+} else {
+  mc.cores <- 2
+}
+```
+
+## 1. Data Download and Preparation
+
+First, we'll download and prepare the serology data:
+
+```{r}
+# Download the data
+url <- "https://raw.githubusercontent.com/adamkucharski/fiji-denv3-2014/master/data/serology_inputs.csv"
+serology_data <- read_csv(url)
+
+# Calculate ELISA difference
+serology_data$ELISA_diff <- serology_data$ELISA2 - serology_data$ELISA1
+
+# Visualize the ELISA differences
+ggplot(serology_data) + 
+  geom_histogram(aes(ELISA_diff), bins = 30) + 
+  theme_minimal() + 
+  labs(x = "ELISA Difference (ELISA2 - ELISA1)", 
+       y = "Frequency",
+       title = "Distribution of ELISA Differences")
+```
+
+## 2. Model Definition
+
+We'll use the same mixture model structure as in Ex1_mixture.Rmd, but applied to our ELISA difference data:
+
+```{r model definition}
+model <- list(
+  lowerParSupport_fitted = c(-8),
+  upperParSupport_fitted = c(8),
+  
+  namesOfParameters = c("sigma"),
+  
+  sampleInitPrior = function(datalist) {
+    rnorm(1, 0, 1)
+  },
+  
+  sampleInitJump = function(params, datalist) {
+    p <- c(0.5, 0.5)
+    mu <- c(0, 2)  # Initial guesses for ELISA differences
+    sigma <- c(1, 1)
+    jump_new <- matrix(c(p, mu, sigma), nrow = 3, byrow = TRUE)
+    jump_new
+  },
+  
+  evaluateLogPrior = function(params, jump, datalist) {
+    p <- dnorm(params[1], 0, 1, log = TRUE)
+    
+    p_vec <- jump[1, ]
+    for(i in 1:length(p_vec) ) {
+      p <- p + dunif(p_vec[i], 0, 1, log = TRUE)
+    }
+    mu_vec <- jump[2, ]
+    for(i in 1:length(mu_vec) ) {
+      p <- p + dunif(mu_vec[i], -10, 10, log = TRUE)  # Adjusted range for ELISA differences
+    }
+    sigma_vec <- jump[3, ]
+    for(i in 1:length(sigma_vec) ) {
+      p <- p + dunif(sigma_vec[i], 0.3, 3, log = TRUE)
+    }
+    N <- ncol(jump)
+    p <- p + dunif(N, 1, 8)
+    p
+  },
+  
+  evaluateLogLikelihood = function(params, jump, datalist) {
+    ll <- 0
+    N <- ncol(jump)
+    p_vec <- jump[1, ]
+    mu_vec <- jump[2, ]
+    sigma_vec <- jump[3, ]
+    
+    z <- datalist$obs
+    N_data <- datalist$N_data
+    sigma <- params[1]
+    
+    for (i in 1:N_data) {
+      i_x = 0
+      for (j in 1:N) {
+        i_x <- i_x + p_vec[j] * dnorm(z[i], mu_vec[j], sigma_vec[j])
+      }
+      ll <- ll + log(i_x)
+    }
+    ll
+  },
+  
+  sampleBirthProposal = function(params, jump, i_idx, datalist) {
+    p_new_sample <- runif(1, 0, 1)
+    p_new <- c(jump[1, ] * (1 - p_new_sample), p_new_sample)
+    mu_new_sample <- runif(1, -10, 10)  # Adjusted range for ELISA differences
+    mu_new <- c(jump[2, ], mu_new_sample)
+    sigma_new_sample <- runif(1, 0.3, 3)
+    sigma_new <- c(jump[3, ], sigma_new_sample)
+    jump_new <- matrix(c(p_new, mu_new, sigma_new), nrow = 3, byrow = TRUE)
+    jump_new
+  },
+  
+  sampleDeathProposal = function(params, jump, i_idx, datalist) {
+    N <- ncol(jump)
+    jump_remove <- jump[, i_idx]
+    jump_new <- jump[, -i_idx]
+    jump_new[1, ] <- c(jump_new[1, ] / (1 - jump_remove[1]))
+    jump_new
+  },
+  
+  evaluateBirthProposal = function(params, jump, i_idx, datalist) {
+    N <- ncol(jump)
+    log(1 / (N * dunif(jump[2, N], -10, 10)))  # Adjusted range
+  },
+  
+  evaluateDeathProposal = function(params, jump, i_idx, datalist) {
+    N <- ncol(jump)
+    log((N) * dunif(jump[2, i_idx], -10, 10))  # Adjusted range
+  },
+  
+  sampleJump = function(params, jump, i_idx, datalist) {
+    N <- ncol(jump)
+    jump_update <- jump[, i_idx]
+    
+    p_new <- min(max(jump_update[1] + rnorm(1, 0, 0.01), 0), 1)
+    diff = (jump_update[1] - p_new) / (N - 1)
+    p_new_vew <- jump[1, ] + diff
+    p_new_vew[i_idx] <- p_new
+    jump[1, ] <- p_new_vew
+    
+    jump[2, i_idx] <- jump_update[2] + rnorm(1, 0, 0.1)
+    jump[3, i_idx] <- max(jump_update[3] + rnorm(1, 0, 0.1), 0.3)
+    
+    jump
+  },
+  
+  sampleProposal = function(params, jump, datalist) {
+    N <- ncol(jump)
+    if (N == 2) {
+      q <- c(0.0, 0.67, 1.0)
+    } else if (N == 20) {
+      q <- c(0.33, 1.0, 1.0)
+    } else {
+      q <- c(0.33, 0.67, 1.0)
+    }
+    q
+  }
+)
+```
+
+## 3. Run the Model
+
+```{r}
+# Define settings
+settings <- list(
+    numberCores = 1,
+    numberChainRuns = 4,
+    iterations = 10000,
+    burninPosterior = 5000,
+    thin = 10
+)
+
+# Prepare data
+data_l <- list(
+    obs = serology_data$ELISA_diff,
+    N_data = length(serology_data$ELISA_diff)
+)
+
+# Run the model
+outputs <- rjmc_func(model, data_l, settings)
+saveRDS(outputs, "serology_mixture_fit.RDS")
+```
+
+## 4. Analyze Results
+
+### 4.1 Number of Components
+
+```{r}
+require(patchwork)
+require(purrr)
+require(ggplot2)
+
+n_chain <- 4
+tables_length <- get_lengths(outputs, n_chain)
+
+df_K_post <- data.frame(
+  dim = names(tables_length),
+  post = as.vector(tables_length)
+)
+
+df_K_post %>% ggplot() + 
+  geom_col(aes(x = dim, y = post)) + 
+  theme_minimal() + 
+  labs(x = "Number of mixture components", 
+       y = "Posterior probability",
+       title = "Posterior Distribution of Number of Components")
+```
+
+### 4.2 Component Parameters
+
+```{r}
+posterior_sample <- map_df(1:4, 
+  function(y) {
+    map_df(1:length(outputs$jump[[y]]), 
+      function(x) {
+        outputs$jump[[y]][[x]] %>% t %>% 
+          as.data.frame %>% 
+          arrange(V2) %>% 
+          mutate(n = 1:nrow(.), sample = x, chain = y) %>%
+          set_names(c("p", "mu", "sigma", "n", "sample", "chain")) %>% 
+          pivot_longer(-c(n, sample, chain), 
+                      names_to = "parameter", 
+                      values_to = "values")
+      }
+    )
+  }
+) %>% pivot_wider(names_from = "parameter", values_from = "values")
+
+# Plot means
+p1 <- posterior_sample %>% ggplot() +    
+  geom_histogram(aes(mu), color = "black", alpha = 0.7) + 
+  theme_bw() + 
+  labs(x = "Component Means", y = "Count",
+       title = "Posterior Distribution of Component Means")
+
+# Plot mixing proportions
+p2 <- posterior_sample %>% ggplot() +    
+  geom_histogram(aes(p), color = "black", alpha = 0.7) + 
+  theme_bw() +
+  labs(x = "Mixing Proportions", y = "Count",
+       title = "Posterior Distribution of Mixing Proportions")
+
+# Plot standard deviations
+p3 <- posterior_sample %>% ggplot() +    
+  geom_histogram(aes(sigma), color = "black", alpha = 0.7) + 
+  theme_bw() +
+  labs(x = "Standard Deviations", y = "Count",
+       title = "Posterior Distribution of Standard Deviations")
+
+p1 / p2 / p3
+```
+
+## 5. Summary
+
+This analysis applied a Gaussian mixture model to the differences between ELISA2 and ELISA1 measurements. The results show:
+
+1. The optimal number of components in the mixture model
+2. The means of each component, representing different levels of ELISA differences
+3. The mixing proportions, indicating the relative frequency of each component
+4. The standard deviations, showing the spread within each component
+
+These results can help identify distinct groups in the serological response and quantify their characteristics.
