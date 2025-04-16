@@ -3,3 +3,6 @@
 /src/rjmc_func.o
 /src/rjmc.so
 /vignettes_old
+vignettes/.DS_Store
+.Rhistory
+.DS_Store

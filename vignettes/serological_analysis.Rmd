@@ -1,5 +1,5 @@
 ---
-title: "Serology Data Analysis with Mixture Model"
+title: "Dengue serological analysis with mixture model"
 author: "Adam Kucharski"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
@@ -11,13 +11,14 @@ vignette: >
 
 ```{r setup, message=FALSE, warning=FALSE}
 library(devtools)
-devtools::load_all()
+library(rjmc)
 library(lubridate)
 library(patchwork)
 library(tidybayes)
 library(ggdist)
 library(readr)
 library(dplyr)
+library(ggplot2)
 
 # Using more than one core might fail on windows
 if (.Platform$OS.type == "windows") {
@@ -50,7 +51,9 @@ ggplot(serology_data) +
 
 ## 2. Model Definition
 
-We'll use the same mixture model structure as in Ex1_mixture.Rmd, but applied to our ELISA difference data:
+We'll use a mixture model that includes:
+1. A normal distribution centered at 0 (representing no change)
+2. One or more lognormal distributions (representing positive changes)
 
 ```{r model definition}
 model <- list(
@@ -64,8 +67,9 @@ model <- list(
   },
   
   sampleInitJump = function(params, datalist) {
+    # First component is always normal centered at 0
     p <- c(0.5, 0.5)
-    mu <- c(0, 2)  # Initial guesses for ELISA differences
+    mu <- c(0, 1)  # First mu is fixed at 0
     sigma <- c(1, 1)
     jump_new <- matrix(c(p, mu, sigma), nrow = 3, byrow = TRUE)
     jump_new
@@ -79,8 +83,9 @@ model <- list(
       p <- p + dunif(p_vec[i], 0, 1, log = TRUE)
     }
     mu_vec <- jump[2, ]
-    for(i in 1:length(mu_vec) ) {
-      p <- p + dunif(mu_vec[i], -10, 10, log = TRUE)  # Adjusted range for ELISA differences
+    # First mu is fixed at 0, others are lognormal means
+    for(i in 2:length(mu_vec) ) {
+      p <- p + dunif(mu_vec[i], 0, 10, log = TRUE)
     }
     sigma_vec <- jump[3, ]
     for(i in 1:length(sigma_vec) ) {
@@ -104,8 +109,11 @@ model <- list(
     
     for (i in 1:N_data) {
       i_x = 0
-      for (j in 1:N) {
-        i_x <- i_x + p_vec[j] * dnorm(z[i], mu_vec[j], sigma_vec[j])
+      # First component is normal
+      i_x <- i_x + p_vec[1] * dnorm(z[i], mu_vec[1], sigma_vec[1])
+      # Other components are lognormal
+      for (j in 2:N) {
+        i_x <- i_x + p_vec[j] * dlnorm(z[i], mu_vec[j], sigma_vec[j])
       }
       ll <- ll + log(i_x)
     }
@@ -115,7 +123,7 @@ model <- list(
   sampleBirthProposal = function(params, jump, i_idx, datalist) {
     p_new_sample <- runif(1, 0, 1)
     p_new <- c(jump[1, ] * (1 - p_new_sample), p_new_sample)
-    mu_new_sample <- runif(1, -10, 10)  # Adjusted range for ELISA differences
+    mu_new_sample <- runif(1, 0, 10)  # Lognormal mean
     mu_new <- c(jump[2, ], mu_new_sample)
     sigma_new_sample <- runif(1, 0.3, 3)
     sigma_new <- c(jump[3, ], sigma_new_sample)
@@ -133,12 +141,12 @@ model <- list(
   
   evaluateBirthProposal = function(params, jump, i_idx, datalist) {
     N <- ncol(jump)
-    log(1 / (N * dunif(jump[2, N], -10, 10)))  # Adjusted range
+    log(1 / (N * dunif(jump[2, N], 0, 10)))
   },
   
   evaluateDeathProposal = function(params, jump, i_idx, datalist) {
     N <- ncol(jump)
-    log((N) * dunif(jump[2, i_idx], -10, 10))  # Adjusted range
+    log((N) * dunif(jump[2, i_idx], 0, 10))
   },
   
   sampleJump = function(params, jump, i_idx, datalist) {
@@ -151,7 +159,10 @@ model <- list(
     p_new_vew[i_idx] <- p_new
     jump[1, ] <- p_new_vew
     
-    jump[2, i_idx] <- jump_update[2] + rnorm(1, 0, 0.1)
+    # First mu stays at 0, others can move
+    if (i_idx > 1) {
+      jump[2, i_idx] <- max(jump_update[2] + rnorm(1, 0, 0.1), 0)
+    }
     jump[3, i_idx] <- max(jump_update[3] + rnorm(1, 0, 0.1), 0.3)
     
     jump
@@ -176,11 +187,11 @@ model <- list(
 ```{r}
 # Define settings
 settings <- list(
-    numberCores = 1,
+    numberCores = mc.cores,
     numberChainRuns = 4,
-    iterations = 10000,
-    burninPosterior = 5000,
-    thin = 10
+    iterations = 5000,  # Reduced iterations for testing
+    burninPosterior = 2000,  # Reduced burnin
+    thin = 5  # Reduced thinning
 )
 
 # Prepare data
@@ -206,6 +217,10 @@ require(ggplot2)
 n_chain <- 4
 tables_length <- get_lengths(outputs, n_chain)
 
+if(length(tables_length) == 0) {
+  stop("No components found in the posterior. Please check the model fit.")
+}
+
 df_K_post <- data.frame(
   dim = names(tables_length),
   post = as.vector(tables_length)
@@ -222,23 +237,42 @@ df_K_post %>% ggplot() +
 ### 4.2 Component Parameters
 
 ```{r}
-posterior_sample <- map_df(1:4, 
-  function(y) {
-    map_df(1:length(outputs$jump[[y]]), 
-      function(x) {
-        outputs$jump[[y]][[x]] %>% t %>% 
-          as.data.frame %>% 
-          arrange(V2) %>% 
-          mutate(n = 1:nrow(.), sample = x, chain = y) %>%
-          set_names(c("p", "mu", "sigma", "n", "sample", "chain")) %>% 
-          pivot_longer(-c(n, sample, chain), 
-                      names_to = "parameter", 
-                      values_to = "values")
-      }
-    )
-  }
-) %>% pivot_wider(names_from = "parameter", values_from = "values")
+# Check if we have valid posterior samples
+if(length(outputs$jump) == 0) {
+  stop("No posterior samples found. Please check the model fit.")
+}
 
+posterior_sample <- tryCatch({
+  map_df(1:4, 
+    function(y) {
+      if(length(outputs$jump[[y]]) == 0) return(NULL)
+      map_df(1:length(outputs$jump[[y]]), 
+        function(x) {
+          outputs$jump[[y]][[x]] %>% t %>% 
+            as.data.frame %>% 
+            arrange(V2) %>% 
+            mutate(n = 1:nrow(.), sample = x, chain = y) %>%
+            set_names(c("p", "mu", "sigma", "n", "sample", "chain")) %>% 
+            pivot_longer(-c(n, sample, chain), 
+                        names_to = "parameter", 
+                        values_to = "values")
+        }
+      )
+    }
+  ) %>% pivot_wider(names_from = "parameter", values_from = "values")
+}, error = function(e) {
+  message("Error processing posterior samples: ", e$message)
+  return(NULL)
+})
+
+if(is.null(posterior_sample)) {
+  stop("Could not process posterior samples. Please check the model fit.")
+}
+
+```
+
+Plot the means
+```{r}
 # Plot means
 p1 <- posterior_sample %>% ggplot() +    
   geom_histogram(aes(mu), color = "black", alpha = 0.7) + 
@@ -263,13 +297,93 @@ p3 <- posterior_sample %>% ggplot() +
 p1 / p2 / p3
 ```
 
+### 4.3 Fitted Distribution vs Data
+
+```{r}
+# Get the most probable number of components
+mode_post <- names(sort(tables_length, decreasing = TRUE))[1]
+post_process <- tryCatch({
+  get_clean_posterior(outputs, mode_post, 4)
+}, error = function(e) {
+  message("Error getting clean posterior: ", e$message)
+  return(NULL)
+})
+
+# Debug information
+if(!is.null(post_process)) {
+  message("Structure of post_process:")
+  str(post_process)
+  message("\nStructure of summary_post:")
+  str(post_process$summary_post)
+  message("\nNumber of rows in summary_post: ", nrow(post_process$summary_post))
+  message("\nNumber of unique samples: ", length(unique(post_process$summary_post$sample)))
+  message("\nNumber of unique chains: ", length(unique(post_process$summary_post$chain)))
+}
+
+# Create a data frame for plotting
+x_values <- seq(min(serology_data$ELISA_diff), max(serology_data$ELISA_diff), length.out = 1000)
+density_values <- rep(0, length(x_values))
+
+# Calculate the fitted density using median values
+if(!is.null(post_process) && nrow(post_process$summary_post) > 0) {
+  # Get median values for each parameter
+  median_params <- post_process$summary_post %>%
+    group_by(order) %>%
+    summarise(
+      p = median(p),
+      mu = median(mu),
+      sigma = median(sigma)
+    ) %>%
+    arrange(order)
+  
+  for (i in 1:nrow(median_params)) {
+    if(i == 1) {
+      # First component is normal (noise)
+      density_values <- density_values + 
+        median_params$p[i] * dnorm(x_values, 
+                                  median_params$mu[i], 
+                                  median_params$sigma[i])
+    } else {
+      # Other components are lognormal (infection)
+      density_values <- density_values + 
+        median_params$p[i] * dlnorm(x_values, 
+                                   median_params$mu[i], 
+                                   median_params$sigma[i])
+    }
+  }
+} else {
+  message("Warning: No valid posterior samples found")
+  density_values <- rep(NA, length(x_values))
+}
+
+# Create the plot
+ggplot() +
+  geom_histogram(data = serology_data, 
+                 aes(x = ELISA_diff, y = ..density..), 
+                 bins = 30, 
+                 fill = "gray", 
+                 alpha = 0.5) +
+  geom_line(data = data.frame(x = x_values, y = density_values),
+            aes(x = x, y = y),
+            color = "red",
+            linewidth = 1) +
+  theme_minimal() +
+  labs(x = "ELISA Difference",
+       y = "Density",
+       title = "Fitted Mixture Distribution vs Data",
+       subtitle = paste("Using", mode_post, "components"))
+```
+
 ## 5. Summary
 
-This analysis applied a Gaussian mixture model to the differences between ELISA2 and ELISA1 measurements. The results show:
+This analysis applied a mixture model to the differences between 2013 and 2015 measurements, with:
+1. A normal distribution centered at 0 (representing noise between samples)
+2. One or more lognormal distributions (representing positive changes)
 
+The results show:
 1. The optimal number of components in the mixture model
-2. The means of each component, representing different levels of ELISA differences
+2. The means and standard deviations of each component
 3. The mixing proportions, indicating the relative frequency of each component
-4. The standard deviations, showing the spread within each component
+4. A comparison of the fitted distribution against the observed data
 
-These results can help identify distinct groups in the serological response and quantify their characteristics.
+These results help identify distinct groups representing: 1) a serological rise indicative of infection and 2) no infection and potential noise in repeat assay measurements.
