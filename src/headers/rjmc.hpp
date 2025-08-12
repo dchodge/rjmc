@@ -645,7 +645,7 @@ namespace rjmc_full{
         {
             if (isinf(value)||isnan(value)){
                 Rcout << "The number is not finite." << endl;
-                stop("Value: ", value);
+                stop("Value: %f", value);
             }
         }
         
@@ -654,7 +654,7 @@ namespace rjmc_full{
             for (int i = 0; i < this->numberFittedPar; i++){
                 if (isinf(proposalSample(i))||isnan(proposalSample(i))){
                     Rcout << "The proposed vector is not finite." << endl;
-                    stop("Value: ", proposalSample(i));
+                    stop("Value: %f", proposalSample(i));
                 }
             }
         }
@@ -665,7 +665,7 @@ namespace rjmc_full{
                 for (int j = 0; j < this->numberFittedPar; j++){
                     if (isinf(covarianceMatrix(i,j)) || isnan(covarianceMatrix(i,j))){
                         Rcpp::Rcout << "The proposed matrix is not finite." << std::endl;
-                        stop("Value: ", covarianceMatrix(i,j));
+                        stop("Value: %f", covarianceMatrix(i,j));
                     }
                 }
             }
