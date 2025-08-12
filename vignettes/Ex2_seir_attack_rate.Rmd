@@ -22,7 +22,7 @@ This vignette demonstrates using RJMCMC to infer a piecewise-constant attack/tra
 - RJMCMC explores the model dimension by proposing birth/death moves on the number of segments, and random-walk updates to segment-specific \(\beta\) values.
 - We show recovery of both the number and locations of change-points and the underlying incidence curve.
 
-**Note**: All safety checks and validation functions have been extracted to `R/safety_check_Ex2.R` to make this vignette more concise and maintainable.
+**Note**: All safety checks and validation functions have been extracted to separate R files to make this vignette more concise and maintainable. When running this vignette interactively, these functions will be automatically loaded. For pkgdown builds, the functions are already available through the package.
 
 ## 1. Packages
 
@@ -38,18 +38,21 @@ library(ggplot2)
 library(tidybayes)
 library(ggdist)
 
-# Load safety check functions
+# Load safety check functions (only when running interactively)
 # These functions provide comprehensive input validation and safe defaults
 # See R/safety_check_Ex2.R for full documentation
-source("R/safety_check_Ex2.R")
-
-# Load corrected birth and death functions
-# These functions match the thesis exactly and include proper dimension checks
-source("R/corrected_birth_death.R")
-
-# Load simple and robust birth/death functions
-# These are much simpler and more standard implementations
-source("R/simple_birth_death.R")
+# Note: In pkgdown builds, these functions are available through the package
+if (interactive()) {
+  source("R/safety_check_Ex2.R")
+  
+  # Load corrected birth and death functions
+  # These functions match the thesis exactly and include proper dimension checks
+  source("R/corrected_birth_death.R")
+  
+  # Load simple and robust birth/death functions
+  # These are much simpler and more standard implementations
+  source("R/simple_birth_death.R")
+}
 
 # Using more than one core might fail on windows
 aaa_mc_cores <- if (.Platform$OS.type == "windows") 1 else 2
