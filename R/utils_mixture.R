@@ -148,3 +148,55 @@ get_posterior_component_size <- function(mix_size, tables_length, post_process, 
       labs(x = "Time (days)", y = "Number of cases", 
         title = paste0("Posterior distribution for ", mix_size, " mixture components (", round(plotl * 100, 0), "% of posterior)")) + ylim(point_y_lim, NA)
 }
+
+
+
+# Diagnostic function to monitor RJMC mixing
+diagnose_rjmc_mixing <- function(outputs) {
+  cat("=== RJMC Mixing Diagnostics ===\n")
+  
+  # Extract jump lengths across all chains
+  jump_lengths <- unlist(lapply(outputs$jump, function(chain) {
+    sapply(chain, function(sample) ncol(sample))
+  }))
+  
+  # Summary statistics
+  cat("Jump length summary:\n")
+  cat("  Min:", min(jump_lengths), "\n")
+  cat("  Max:", max(jump_lengths), "\n")
+  cat("  Mean:", round(mean(jump_lengths), 2), "\n")
+  cat("  Median:", median(jump_lengths), "\n")
+  
+  # Frequency table
+  freq_table <- table(jump_lengths)
+  cat("\nJump length frequencies:\n")
+  for (k in sort(as.numeric(names(freq_table)))) {
+    cat("  K =", k, ":", freq_table[as.character(k)], "(", 
+        round(100 * freq_table[as.character(k)] / length(jump_lengths), 1), "%)\n")
+  }
+  
+  # Check for stuck chains
+  stuck_threshold <- 0.8  # If 80% of samples are in one state, consider it stuck
+  max_freq <- max(freq_table) / length(jump_lengths)
+  if (max_freq > stuck_threshold) {
+    cat("\n⚠️  WARNING: Algorithm appears to be stuck!\n")
+    cat("   Most frequent state accounts for", round(100 * max_freq, 1), "% of samples\n")
+    cat("   Consider:\n")
+    cat("   1. Increasing iterations and burn-in\n")
+    cat("   2. Adjusting proposal probabilities\n")
+    cat("   3. Improving initialization\n")
+  } else {
+    cat("\n✅ Good mixing: No single state dominates\n")
+  }
+  
+  # Effective sample size approximation
+  ess_approx <- length(jump_lengths) / (1 + 2 * sum(acf(jump_lengths, plot = FALSE)$acf[-1]))
+  cat("\nEffective sample size (approximate):", round(ess_approx, 0), "\n")
+  
+  return(list(
+    jump_lengths = jump_lengths,
+    freq_table = freq_table,
+    is_stuck = max_freq > stuck_threshold,
+    ess_approx = ess_approx
+  ))
+}
