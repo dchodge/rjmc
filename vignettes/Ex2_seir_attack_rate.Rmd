@@ -12,7 +12,13 @@ vignette: >
 <!-- Triggering GitHub Actions workflow -->
 
 ```{r include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  message = FALSE, 
+  warning = FALSE,
+  results = 'hide',  # Hide text output
+  fig.show = 'asis'  # Show plots inline
+)
 set.seed(123)
 ```
 
@@ -26,7 +32,7 @@ This vignette demonstrates using RJMCMC to infer a piecewise-constant attack/tra
 
 ## 1. Packages
 
-```{r setup}
+```{r setup, results='hide'}
 
 library(devtools)
 devtools::load_all()
@@ -67,7 +73,7 @@ We simulate a discrete-time SEIR model (day step) with a piecewise-constant \(\b
 - Infectious period: 1/\(\gamma\) = 6 days
 - Change-points at days 40 and 80 with segment values: 0.30, 0.01, 0.40
 
-```{r simulate}
+```{r simulate, results='hide'}
 # Helper to expand piecewise-constant beta from segment endpoints
 make_beta_t <- function(beta_vec, cp_vec, T) {
   # Use safety check functions
@@ -234,7 +240,7 @@ This implementation follows the RJMCMC theory from Lyyjynen (2014) §5.2 for pie
 - **Acceptance ratios**: Include proposal PDFs, Jacobian, and prior ratios as per Green (1995)
 - **Likelihood**: \(y_t \sim \text{Normal}(\mu_t, \sigma^2)\) where \(\mu_t\) is the expected incidence from the SEIR model
 
-```{r model}
+```{r model, results='hide'}
 # Build expected incidence given a jump matrix
 expected_incidence_from_jump <- function(params, jump, datalist) {
   # Use safety check functions
@@ -626,7 +632,7 @@ model <- list(
 ```
 ## 4. Settings, data, and run
 
-```{r run}
+```{r run, results='hide'}
 
 settings <- list(
   numberCores = 4,
@@ -661,7 +667,7 @@ outputs <- rjmc_func(model, data_l, settings)
 
 ### 5.1 Posterior over number of segments (change-points + 1)
 
-```{r posterior_K, fig.width=7, fig.height=4}
+```{r posterior_K, fig.width=7, fig.height=4, results='hide'}
 
 K_counts <- map_dbl(outputs$jump, ~length(.x)) # number of posterior samples per chain
 K_tab <- map_df(1:length(outputs$jump), function(c) {
@@ -680,7 +686,7 @@ K_tab %>% ggplot(aes(x = factor(K), y = prop)) +
 
 ### 5.2 Recover transmission rate and incidence (conditional on modal K)
 
-```{r posterior_beta_inc, fig.width=7, fig.height=8}
+```{r posterior_beta_inc, fig.width=7, fig.height=8, results='hide'}
 
 # Extract samples with K == K_mode across all chains
 samples_K <- map_df(1:length(outputs$jump), function(c) {
@@ -753,7 +759,7 @@ This analysis shows that RJMCMC can recover both the number and locations of cha
 
 Let's check for convergence between chains by comparing the posterior distributions of beta values and change-points.
 
-```{r convergence_check, fig.width=10, fig.height=8}
+```{r convergence_check, fig.width=10, fig.height=8, results='hide'}
 # Extract all samples across chains for convergence analysis
 all_samples <- map_df(1:length(outputs$jump), function(c) {
   map_df(1:length(outputs$jump[[c]]), function(s) {
