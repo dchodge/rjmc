@@ -1,5 +1,7 @@
 ## Reversible Jump Markov Chain Monte Carlo (RJMC)
 
+![RJMC Logo](rjmc_logo.png)
+
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![R-CMD-check](https://github.com/seroanalytics/serojump/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/seroanalytics/serojump/actions/workflows/R-CMD-check.yaml)
 
@@ -36,7 +38,6 @@ Make sure you have R installed on your system. You can download R from [https://
 
 You can install the development version of `rjmc` from GitHub using the `devtools` package. If you don't already have `devtools` installed, you can install it with:
 
-
 ```{r}
 
 install.packages("devtools") 
@@ -56,9 +57,12 @@ library(rjmc)
 
 ## Getting Started
 
-We provide examples of how to implement this package for various scenarios in vignettes:
+We provide examples of how to implement this package for various models in the vignettes:
 
-- Example 1: How to fit a mixture distribution where the number of mixtures is unknown
+- Example 1: How to fit a mixture distribution where the number of mixtures is unknownhttps://cran.r-project.org/
+- Example 2: How to fit a SEIR epidemiological model with unknown change points
+
+For an interactive demonstration of mixture model fitting, try our [**RJMC Widget**](https://dchodge.github.io/rjmc-widget-mixture/) which allows you to upload your own data and explore the RJMCMC algorithm in real-time.
 
 Refer to the background documentation or vignettes in the package for step-by-step tutorials.
 
@@ -71,8 +75,8 @@ We welcome contributions and suggestions! If you'd like to contribute to the `rj
 
 For questions or feedback, contact the package maintainer:
 
-**David Hodgson**  
-Email: [david.hodgson@lshtm.ac.uk](mailto:david.hodgson@lshtm.ac.uk)
+**David Hodgson**
+Email: [david.hodgson@charite.de](mailto:david.hodgson@charite.de)
 
 ---
 
